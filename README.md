@@ -131,3 +131,13 @@ if err := appgofig.WriteToYamlExampleFile(cfg, configDescriptions, "example/Conf
 	log.Fatal(err)
 }
 ```
+
+# Tests
+A basic set of tests is included. To run: 
+
+```go
+go test -cover ./... -coverprofile=coverage.out
+go tool cover -html=coverage.out -o coverage.html
+```
+
+You can admire the coverage in a browser then.
