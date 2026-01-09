@@ -1,5 +1,7 @@
 # AppGofig (AppConfig for Go)
 
+![Coverage](https://codecov.io/gh/kzoltner/appgofig/branch/main/graph/badge.svg)
+
 Using a struct (and one description map) as single source of truth to add configuration to Go applications.
 
 > [!note]
