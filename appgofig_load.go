@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/joho/godotenv"
-	"go.yaml.in/yaml/v4"
+	"go.yaml.in/yaml/v3"
 )
 
 // applyDefaultsToConfig uses applyStringMapToConfig to apply the default string inputs to targetConfig
