@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/kzoltner/appgofig"
+	"github.com/smartfactory-kl/appgofig"
 )
 
 type Config struct {

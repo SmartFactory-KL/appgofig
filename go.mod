@@ -1,4 +1,4 @@
-module github.com/kzoltner/appgofig
+module github.com/smartfactory-kl/appgofig
 
 go 1.25.5
 

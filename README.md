@@ -1,7 +1,5 @@
 # AppGofig (AppConfig for Go)
 
-![Coverage](https://codecov.io/gh/kzoltner/appgofig/branch/main/graph/badge.svg)
-
 Using a struct (and one optional description map) as single source of truth to add configuration to Go applications.
 
 > [!note]
@@ -12,7 +10,7 @@ Using a struct (and one optional description map) as single source of truth to a
 Should be a simple go get command:
 
 ```bash
-go get github.com/kzoltner/appgofig
+go get github.com/smartfactory-kl/appgofig
 ```
 
 # How to use
