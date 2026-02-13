@@ -334,6 +334,23 @@ func TestMapInputOnly(t *testing.T) {
 	}
 }
 
+func TestMapInputIncorrectReadMode(t *testing.T) {
+	resetEnv()
+	cfg := &TestConfig{}
+
+	mapInputVals := map[string]string{
+		"StringVal": "custom",
+		"IntVal":    "999",
+	}
+	err := ReadConfig(cfg,
+		WithReadMode(ReadModeEnvOnly),
+		WithMapInput(mapInputVals),
+	)
+	if err == nil {
+		t.Fatalf("expected error, got none")
+	}
+}
+
 func TestBooleanParsing(t *testing.T) {
 	resetEnv()
 	cfg := &TestConfig{}

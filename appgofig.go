@@ -103,6 +103,11 @@ func ReadConfig(targetConfig any, optionList ...AppGofigOption) error {
 		}
 	}
 
+	// prevent WithMapInput from working with anything else other than ReadModeMapInputOnly
+	if gofigOptions.ReadMode != ReadModeMapInputOnly && gofigOptions.MapInputValues != nil {
+		return fmt.Errorf("WithMapInput shall only be used in combination with ReadModeMapInputOnly")
+	}
+
 	// apply the default values first
 	if err := applyDefaultsToConfig(targetConfig); err != nil {
 		return fmt.Errorf("unable to apply default values: %w", err)
