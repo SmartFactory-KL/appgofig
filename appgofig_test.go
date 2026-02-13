@@ -18,6 +18,10 @@ type TestConfig struct {
 	FloatVal  float64 `default:"0.1" env:"TEST_FLOAT"`
 }
 
+type TestEmptyEnvTagConfig struct {
+	StringVal string `default:"defaultStr" env:""`
+}
+
 // Helper to reset environment variables
 func resetEnv() {
 	os.Unsetenv("TEST_STRING")
@@ -161,6 +165,20 @@ func TestReadModeEnvOnly(t *testing.T) {
 	}
 }
 
+func TestEmptyEnvTagFallsBackToFieldName(t *testing.T) {
+	resetEnv()
+	os.Setenv("StringVal", "fieldNameEnv")
+
+	cfg := &TestEmptyEnvTagConfig{}
+	if err := ReadConfig(cfg, WithReadMode(ReadModeEnvOnly)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.StringVal != "fieldNameEnv" {
+		t.Errorf("expected StringVal=fieldNameEnv, got %s", cfg.StringVal)
+	}
+}
+
 func TestReadModeYamlOnly(t *testing.T) {
 	resetEnv()
 
@@ -292,15 +310,18 @@ func TestReadModeEnvThenYaml(t *testing.T) {
 	}
 }
 
-func TestCustomDefaults(t *testing.T) {
+func TestMapInputOnly(t *testing.T) {
 	resetEnv()
 	cfg := &TestConfig{}
 
-	customDefaults := map[string]string{
+	mapInputVals := map[string]string{
 		"StringVal": "custom",
 		"IntVal":    "999",
 	}
-	err := ReadConfig(cfg, WithNewDefaults(customDefaults))
+	err := ReadConfig(cfg,
+		WithReadMode(ReadModeMapInputOnly),
+		WithMapInput(mapInputVals),
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

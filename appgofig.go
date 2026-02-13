@@ -13,17 +13,18 @@ import (
 type ConfigReadMode string
 
 const (
-	ReadModeEnvOnly     ConfigReadMode = "env-only"
-	ReadModeYamlOnly    ConfigReadMode = "yaml-only"
-	ReadModeEnvThenYaml ConfigReadMode = "env-yaml"
-	ReadModeYamlThenEnv ConfigReadMode = "yaml-env"
+	ReadModeMapInputOnly ConfigReadMode = "map-input-only" // only reading default values, intended for tests
+	ReadModeEnvOnly      ConfigReadMode = "env-only"       // only reading environment
+	ReadModeYamlOnly     ConfigReadMode = "yaml-only"      // only reading yaml
+	ReadModeEnvThenYaml  ConfigReadMode = "env-yaml"       // first env, then yaml
+	ReadModeYamlThenEnv  ConfigReadMode = "yaml-env"       // first yaml, then env
 )
 
 type AppGofigOptions struct {
 	ReadMode          ConfigReadMode
 	YamlFilePath      string
 	YamlFileRequested bool
-	NewDefaults       map[string]string
+	MapInputValues    map[string]string
 }
 
 type AppGofigOption func(*AppGofigOptions)
@@ -43,10 +44,10 @@ func WithYamlFile(filePath string) AppGofigOption {
 	}
 }
 
-// WithNewDefaults adds new default values to use
-func WithNewDefaults(newDefaults map[string]string) AppGofigOption {
+// WithMapInput adds new default values to use
+func WithMapInput(values map[string]string) AppGofigOption {
 	return func(options *AppGofigOptions) {
-		options.NewDefaults = newDefaults
+		options.MapInputValues = values
 	}
 }
 
@@ -71,32 +72,40 @@ func ReadConfig(targetConfig any, optionList ...AppGofigOption) error {
 		ReadMode:          ReadModeEnvThenYaml,
 		YamlFilePath:      "",
 		YamlFileRequested: false,
-		NewDefaults:       nil,
+		MapInputValues:    nil,
 	}
 
 	for _, opt := range optionList {
 		opt(gofigOptions)
 	}
 
+	// if a yaml file is requested, make sure it is
+	// a) actually needed
+	// b) not empty
 	if gofigOptions.YamlFileRequested {
-		if len(gofigOptions.YamlFilePath) == 0 {
-			return fmt.Errorf("the yaml file path cannot be empty")
+		if gofigOptions.ReadMode == ReadModeMapInputOnly {
+			return fmt.Errorf("when using the ReadModeMapInputOnly, no yaml file shall be specified")
 		}
 
 		if gofigOptions.ReadMode == ReadModeEnvOnly {
 			return fmt.Errorf("when using the ReadModeEnvOnly, no yaml file shall be specified")
 		}
+
+		if len(gofigOptions.YamlFilePath) == 0 {
+			return fmt.Errorf("the yaml file path cannot be empty")
+		}
+	}
+
+	// for the map input read mode, a mapInputValues cannot be nil
+	if gofigOptions.ReadMode == ReadModeMapInputOnly {
+		if gofigOptions.MapInputValues == nil {
+			return fmt.Errorf("when using the ReadModeMapInputOnly, a non-nil map has to be provided via WithMapInput")
+		}
 	}
 
 	// apply the default values first
-	if gofigOptions.NewDefaults == nil {
-		if err := applyDefaultsToConfig(targetConfig); err != nil {
-			return fmt.Errorf("unable to apply defaults: %w", err)
-		}
-	} else {
-		if err := applyStringMapToConfig(targetConfig, gofigOptions.NewDefaults); err != nil {
-			return fmt.Errorf("unable to apply new defaults: %w", err)
-		}
+	if err := applyDefaultsToConfig(targetConfig); err != nil {
+		return fmt.Errorf("unable to apply default values: %w", err)
 	}
 
 	// read the config according to the read mode
@@ -127,6 +136,11 @@ func ReadConfig(targetConfig any, optionList ...AppGofigOption) error {
 		if err := applyEnvironmentToConfig(targetConfig); err != nil {
 			return fmt.Errorf("could not read config values from env: %w", err)
 		}
+	case ReadModeMapInputOnly:
+		// defaults have already been applied, now walk over map and apply values
+		if err := applyStringMapToConfig(targetConfig, gofigOptions.MapInputValues); err != nil {
+			return fmt.Errorf("unable to apply map input values: %w", err)
+		}
 	default:
 		return fmt.Errorf("invalid read mode %s", gofigOptions.ReadMode)
 	}
@@ -141,6 +155,12 @@ func ReadConfig(targetConfig any, optionList ...AppGofigOption) error {
 
 // LogToConsole logs the actual configuration to the console
 func LogConfig(targetConfig any, out io.Writer) {
+	if targetConfig == nil {
+		fmt.Fprint(out, "### AppGofig Configuration Start ###\n")
+		fmt.Fprint(out, "### ERROR: Config was nil")
+		return
+	}
+
 	fmt.Fprint(out, "### AppGofig Configuration Start ###\n")
 
 	t := reflect.TypeOf(targetConfig).Elem()
@@ -179,7 +199,10 @@ func WriteToMarkdownFile(targetConfig any, configDescriptions map[string]string,
 	for k := 0; k < t.NumField(); k++ {
 		field := t.Field(k)
 		yamlKey := field.Name
-		envKey := field.Tag.Get("env")
+		envKey := strings.TrimSpace(field.Tag.Get("env"))
+		if len(envKey) == 0 {
+			envKey = field.Name
+		}
 
 		defaultValue := field.Tag.Get("default")
 		description := configDescriptions[yamlKey]
@@ -297,13 +320,16 @@ func shouldBeMasked(field reflect.StructField) bool {
 	return boolVal
 }
 
-// isRequiredField checks if field has a tag "req" and returns true only
-// if that req is ok for strconv.ParseBool being true, false otherwise
+// isRequiredField checks if field has a tag "req" or "required" and returns true only
+// if one of them is ok for strconv.ParseBool being true, false otherwise.
+// "req" takes prio if both are present.
 func isRequiredField(field reflect.StructField) bool {
 	reqVal, ok := field.Tag.Lookup("req")
-
 	if !ok {
-		return false
+		reqVal, ok = field.Tag.Lookup("required")
+		if !ok {
+			return false
+		}
 	}
 
 	if boolVal, err := strconv.ParseBool(reqVal); err != nil {

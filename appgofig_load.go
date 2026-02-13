@@ -45,7 +45,7 @@ func applyEnvironmentToConfig(targetConfig any) error {
 		fieldEnv, hasEnv := field.Tag.Lookup("env")
 
 		keyToUse := field.Name
-		if hasEnv {
+		if hasEnv && len(strings.TrimSpace(fieldEnv)) > 0 {
 			keyToUse = fieldEnv
 		}
 
