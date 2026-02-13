@@ -37,12 +37,24 @@ func main() {
 		nextCfg,
 		appgofig.WithReadMode(appgofig.ReadModeEnvThenYaml),
 		appgofig.WithYamlFile("example/my_yaml.yml"),
-		appgofig.WithNewDefaults(map[string]string{
+	); err != nil {
+		log.Fatal(err)
+	}
+
+	appgofig.LogConfig(nextCfg, os.Stdout)
+
+	// showcasing map input
+	testCfg := &Config{}
+
+	if err := appgofig.ReadConfig(
+		testCfg,
+		appgofig.WithReadMode(appgofig.ReadModeMapInputOnly),
+		appgofig.WithMapInput(map[string]string{
 			"MyOwnSetting": "1000",
 		}),
 	); err != nil {
 		log.Fatal(err)
 	}
 
-	appgofig.LogConfig(nextCfg, os.Stdout)
+	appgofig.LogConfig(testCfg, os.Stdout)
 }

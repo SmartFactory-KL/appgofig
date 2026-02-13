@@ -55,12 +55,12 @@ log.Println(cfg.MyOwnSetting)
 The `Config` struct determines your whole configuration. You can name it whatever you want.
 The following tags are usable:
 
-| Tag Name  | Content                                                                                                                   |
-| --------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `env`     | Key used for Environment Variables. If this is empty, it defaults to the field name                                       |
-| `default` | String representation of a default value. Otherwise an empty string is used.                                              |
-| `req`     | If set to "true", this config setting cannot be empty. Only applies to string values and is ignored on non-string values. |
-| `mask`    | If set to "true", this will mask the value of a field when using `LogConfig()`                                            |
+| Tag Name            | Content                                                                                                                  |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `env`               | Key used for Environment Variables. If omitted or empty, it defaults to the field name                                   |
+| `default`           | String representation of a default value. For `int`, `float64`, and `bool`, a parseable value should be provided         |
+| `req` or `required` | If set to "true", this config setting cannot be empty. Only applies to string values and is ignored on non-string values |
+| `mask`              | If set to "true", this will mask the value of a field when using `LogConfig()`                                           |
 
 Example entry:
 
@@ -80,20 +80,21 @@ The following are available:
 
 - `WithReadMode(readMode ConfigReadMode)` to set a read mode
 - `WithYamlFile(filePath string)` to set a specific YAML file
-- `WithNewDefaults(newDefaults map[string]string)` to set new defaults (e.g. for testing)
+- `WithMapInput(values map[string]string)` to provide a map of key value pairs. Only applied in combination with `ReadModeMapInputOnly`, ignored otherwise.
 
 Check the `example` folder on how to use them.
 
 ### ReadModes
 
-There are four read modes available:
+There are five read modes available:
 
-| ReadMode                       | Description                                                          |
-| ------------------------------ | -------------------------------------------------------------------- |
-| `appgofig.ReadModeEnvOnly`     | Only uses Environment to read values                                 |
-| `appgofig.ReadModeYamlOnly`    | Only uses a YAML file                                                |
-| `appgofig.ReadModeEnvThenYaml` | First read env, then apply YAML (overwriting env values if present). This is the default read mode.  |
-| `appgofig.ReadModeYamlThenEnv` | First read YAML, then apply env (overwriting YAML values if present) |
+| ReadMode                        | Description                                                                                           |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `appgofig.ReadModeEnvOnly`      | Only uses Environment to read values                                                                  |
+| `appgofig.ReadModeYamlOnly`     | Only uses a YAML file                                                                                 |
+| `appgofig.ReadModeEnvThenYaml`  | First read env, then apply YAML (overwriting env values if present). This is the default read mode.   |
+| `appgofig.ReadModeYamlThenEnv`  | First read YAML, then apply env (overwriting YAML values if present)                                  |
+| `appgofig.ReadModeMapInputOnly` | Only apply values supplied via `WithMapInput()` on top of defaults, no yaml or env (useful for tests) |
 
 ### Using yaml files
 
@@ -133,7 +134,8 @@ if err := appgofig.WriteToYamlExampleFile(cfg, configDescriptions, "example/Conf
 ```
 
 # Tests
-A basic set of tests is included. To run: 
+
+A basic set of tests is included. To run:
 
 ```go
 go test -cover ./... -coverprofile=coverage.out

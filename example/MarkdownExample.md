@@ -1,5 +1,5 @@
 # Default Configuration
-*Generated 2026-01-09T15:17:35+01:00*
+*Generated 2026-02-13T18:25:39+01:00*
 
 | YAML Key | ENV Key | Type | Required | Default | Description |
 |---|---|---|---|---|---|
