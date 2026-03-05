@@ -80,7 +80,7 @@ The following are available:
 
 - `WithReadMode(readMode ConfigReadMode)` to set a read mode
 - `WithYamlFile(filePath string)` to set a specific YAML file
-- `WithMapInput(values map[string]string)` to provide a map of key value pairs. Only applied in combination with `ReadModeMapInputOnly`, ignored otherwise.
+- `WithMapInput(values map[string]string)` to provide a map of key value pairs. Only applied in combination with `ReadModeMapInputOnly`, must not be present otherwise.
 
 Check the `example` folder on how to use them.
 

@@ -158,7 +158,7 @@ func ReadConfig(targetConfig any, optionList ...AppGofigOption) error {
 	return nil
 }
 
-// LogToConsole logs the actual configuration to the console
+// LogConfig logs the actual configuration to the console
 func LogConfig(targetConfig any, out io.Writer) {
 	if targetConfig == nil {
 		fmt.Fprint(out, "### AppGofig Configuration Start ###\n")
@@ -190,36 +190,18 @@ func LogConfig(targetConfig any, out io.Writer) {
 
 // CreateMarkdownFile creates a simple markdown table with information about the provided config inputs
 func WriteToMarkdownFile(targetConfig any, configDescriptions map[string]string, markdownFilePath string) error {
+	if targetConfig == nil {
+		return fmt.Errorf("unable to create config markdown file (%q): config is nil", markdownFilePath)
+	}
+
 	var sb strings.Builder
 
 	currentTimeString := time.Now().Format(time.RFC3339)
 
-	sb.WriteString("# Default Configuration\n")
+	sb.WriteString("# Default Configuration Information\n")
 	fmt.Fprintf(&sb, "*Generated %s*\n\n", currentTimeString)
 
-	sb.WriteString("| YAML Key | ENV Key | Type | Required | Default | Description |\n")
-	sb.WriteString("|---|---|---|---|---|---|\n")
-
-	t := reflect.TypeOf(targetConfig).Elem()
-	for k := 0; k < t.NumField(); k++ {
-		field := t.Field(k)
-		yamlKey := field.Name
-		envKey := strings.TrimSpace(field.Tag.Get("env"))
-		if len(envKey) == 0 {
-			envKey = field.Name
-		}
-
-		defaultValue := field.Tag.Get("default")
-		description := configDescriptions[yamlKey]
-
-		required := "no"
-		if isRequiredField(field) {
-			required = "yes"
-		}
-
-		// Write Markdown row
-		sb.WriteString("| " + yamlKey + " | " + envKey + " | " + field.Type.Kind().String() + " | " + required + " | " + defaultValue + " | " + description + " |\n")
-	}
+	WriteMarkdownOverviewTable(targetConfig, configDescriptions, &sb)
 
 	markdownFile, err := os.Create(markdownFilePath)
 	if err != nil {
@@ -234,8 +216,49 @@ func WriteToMarkdownFile(targetConfig any, configDescriptions map[string]string,
 	return nil
 }
 
+// WriteMarkdownOverviewTable will write a markdown table containing all availabel configuration information
+// into the provided string builder
+func WriteMarkdownOverviewTable(targetConfig any, configDescriptions map[string]string, sb *strings.Builder) {
+	sb.WriteString("## Configuration Overview\n")
+	sb.WriteString("This is an auto-generated overview of all configuration information\n")
+	sb.WriteString("\n")
+	sb.WriteString("| YAML Key | ENV Key | Type | Required | Default | Description |\n")
+	sb.WriteString("|---|---|---|---|---|---|\n")
+
+	t := reflect.TypeOf(targetConfig).Elem()
+	for k := 0; k < t.NumField(); k++ {
+		field := t.Field(k)
+		fieldType := field.Type.Kind()
+		yamlKey := field.Name
+		envKey := strings.TrimSpace(field.Tag.Get("env"))
+		if len(envKey) == 0 {
+			envKey = field.Name
+		}
+
+		defaultValue := field.Tag.Get("default")
+		description := configDescriptions[yamlKey]
+
+		// mask default values
+		if fieldType == reflect.String {
+			defaultValue = fmt.Sprintf("`%s`", defaultValue)
+		}
+
+		required := "no"
+		if isRequiredField(field) {
+			required = "yes"
+		}
+
+		// Write Markdown row
+		sb.WriteString("| " + yamlKey + " | `" + envKey + "` | " + fieldType.String() + " | " + required + " | " + defaultValue + " | " + description + " |\n")
+	}
+}
+
 // CreateYamlExampleFile creates an example yaml file with comments providing the description and applied defaults
 func WriteToYamlExampleFile(targetConfig any, configDescriptions map[string]string, yamlExampleFilePath string) error {
+	if targetConfig == nil {
+		return fmt.Errorf("unable to create example config yaml file (%q): config is nil", yamlExampleFilePath)
+	}
+
 	var sb strings.Builder
 
 	currentTimeString := time.Now().Format(time.RFC3339)
@@ -246,10 +269,15 @@ func WriteToYamlExampleFile(targetConfig any, configDescriptions map[string]stri
 	t := reflect.TypeOf(targetConfig).Elem()
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
+		fieldType := field.Type.Kind()
 		yamlKey := field.Name
 
 		defaultValue := field.Tag.Get("default")
 		description := configDescriptions[field.Name]
+
+		if fieldType == reflect.String {
+			defaultValue = strconv.Quote(defaultValue)
+		}
 
 		required := " - optional"
 		if isRequiredField(field) {
@@ -257,7 +285,7 @@ func WriteToYamlExampleFile(targetConfig any, configDescriptions map[string]stri
 		}
 
 		// Write Row
-		fmt.Fprintf(&sb, "# %s [%s%s] - %s \n", yamlKey, field.Type.Kind().String(), required, description)
+		fmt.Fprintf(&sb, "# %s [%s%s] - %s \n", yamlKey, fieldType.String(), required, description)
 		fmt.Fprintf(&sb, "%s: %s\n\n", yamlKey, defaultValue)
 	}
 
