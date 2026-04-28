@@ -200,7 +200,7 @@ func VisitConfigEntries(targetConfig any, visit func(ConfigEntry)) error {
 	return nil
 }
 
-// CreateMarkdownFile creates a simple markdown table with information about the provided config inputs
+// WriteToMarkdownFile creates a simple markdown table with information about the provided config inputs.
 func WriteToMarkdownFile(targetConfig any, configDescriptions map[string]string, markdownFilePath string) error {
 	if targetConfig == nil {
 		return fmt.Errorf("unable to create config markdown file (%q): config is nil", markdownFilePath)
@@ -265,7 +265,7 @@ func WriteMarkdownOverviewTable(targetConfig any, configDescriptions map[string]
 	}
 }
 
-// CreateYamlExampleFile creates an example yaml file with comments providing the description and applied defaults
+// WriteToYamlExampleFile creates an example yaml file with comments providing the description and applied defaults.
 func WriteToYamlExampleFile(targetConfig any, configDescriptions map[string]string, yamlExampleFilePath string) error {
 	if targetConfig == nil {
 		return fmt.Errorf("unable to create example config yaml file (%q): config is nil", yamlExampleFilePath)
@@ -374,14 +374,12 @@ func hasBooleanTagSet(field reflect.StructField, tagsToCheck []string) bool {
 	return false
 }
 
-// shouldBeMasked returns true if the field has a "mask" tag
+// shouldBeMasked uses hasBooleanTagSet to check ["masked", "mask"] in a fields tag
 func shouldBeMasked(field reflect.StructField) bool {
 	return hasBooleanTagSet(field, []string{"masked", "mask"})
 }
 
-// isRequiredField checks if field has a tag "req" or "required" and returns true only
-// if one of them is ok for strconv.ParseBool being true, false otherwise.
-// "req" takes prio if both are present.
+// isRequiredField uses hasBooleanTagSet to check ["required", "req"] in a fields tag
 func isRequiredField(field reflect.StructField) bool {
 	return hasBooleanTagSet(field, []string{"required", "req"})
 }
