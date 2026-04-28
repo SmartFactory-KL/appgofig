@@ -6,6 +6,7 @@ package appgofig
 
 import (
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -94,17 +95,54 @@ func TestRequiredField(t *testing.T) {
 	}
 }
 
-func TestLogMasking(t *testing.T) {
+func TestVisitConfigMasking(t *testing.T) {
 	resetEnv()
 	cfg := &TestConfig{}
-	ReadConfig(cfg)
+	if err := ReadConfig(cfg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	var sb strings.Builder
-	LogConfig(cfg, &sb)
-	logOutput := sb.String()
+	entries := map[string]string{}
+	if err := VisitConfigEntries(cfg, func(entry ConfigEntry) {
+		entries[entry.Key] = entry.Value
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	if !strings.Contains(logOutput, "[Masked") {
-		t.Errorf("expected secret field to be masked, got: %s", logOutput)
+	if !strings.Contains(entries["SecretVal"], "[Masked") {
+		t.Errorf("expected secret field to be masked, got: %s", entries["SecretVal"])
+	}
+	if entries["StringVal"] != "defaultStr" {
+		t.Errorf("expected StringVal=defaultStr, got %s", entries["StringVal"])
+	}
+}
+
+func TestVisitConfigEntries(t *testing.T) {
+	cfg := &TestConfig{
+		StringVal: "custom-string",
+		IntVal:    123,
+		BoolVal:   false,
+		SecretVal: "supersecret",
+		FloatVal:  9.5,
+	}
+
+	var entries []ConfigEntry
+	if err := VisitConfigEntries(cfg, func(entry ConfigEntry) {
+		entries = append(entries, entry)
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expected := []ConfigEntry{
+		{Key: "StringVal", Value: "custom-string"},
+		{Key: "IntVal", Value: "123"},
+		{Key: "BoolVal", Value: "false"},
+		{Key: "SecretVal", Value: "[Masked - Length: 11]"},
+		{Key: "FloatVal", Value: "9.5"},
+	}
+
+	if !reflect.DeepEqual(entries, expected) {
+		t.Fatalf("unexpected entries: got %#v want %#v", entries, expected)
 	}
 }
 
