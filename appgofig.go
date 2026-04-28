@@ -172,12 +172,12 @@ func VisitConfigEntries(targetConfig any, visit func(ConfigEntry)) error {
 		return fmt.Errorf("visit func must not be nil")
 	}
 
-	value := reflect.ValueOf(targetConfig)
-	if value.Kind() != reflect.Pointer || value.Elem().Kind() != reflect.Struct {
+	configValue := reflect.ValueOf(targetConfig)
+	if configValue.Kind() != reflect.Pointer || configValue.Elem().Kind() != reflect.Struct {
 		return fmt.Errorf("config has to point to a struct")
 	}
 
-	v := value.Elem()
+	v := configValue.Elem()
 	t := v.Type()
 
 	for k := 0; k < t.NumField(); k++ {
