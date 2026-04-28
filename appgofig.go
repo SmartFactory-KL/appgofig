@@ -2,7 +2,6 @@ package appgofig
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"reflect"
 	"strconv"
@@ -19,6 +18,11 @@ const (
 	ReadModeEnvThenYaml  ConfigReadMode = "env-yaml"       // first env, then yaml
 	ReadModeYamlThenEnv  ConfigReadMode = "yaml-env"       // first yaml, then env
 )
+
+type ConfigEntry struct {
+	Key   string
+	Value string
+}
 
 type AppGofigOptions struct {
 	ReadMode          ConfigReadMode
@@ -158,37 +162,45 @@ func ReadConfig(targetConfig any, optionList ...AppGofigOption) error {
 	return nil
 }
 
-// LogConfig logs the actual configuration to the console
-func LogConfig(targetConfig any, out io.Writer) {
+// VisitConfigEntries is used to decouple logging of the current entries from any log implementation
+// This replaces the old LogConfig method
+func VisitConfigEntries(targetConfig any, visit func(ConfigEntry)) error {
 	if targetConfig == nil {
-		fmt.Fprint(out, "### AppGofig Configuration Start ###\n")
-		fmt.Fprint(out, "### ERROR: Config was nil")
-		return
+		return fmt.Errorf("config was nil")
+	}
+	if visit == nil {
+		return fmt.Errorf("visit func must not be nil")
 	}
 
-	fmt.Fprint(out, "### AppGofig Configuration Start ###\n")
+	configValue := reflect.ValueOf(targetConfig)
+	if configValue.Kind() != reflect.Pointer || configValue.Elem().Kind() != reflect.Struct {
+		return fmt.Errorf("config has to point to a struct")
+	}
 
-	t := reflect.TypeOf(targetConfig).Elem()
-	v := reflect.ValueOf(targetConfig).Elem()
+	v := configValue.Elem()
+	t := v.Type()
 
 	for k := 0; k < t.NumField(); k++ {
 		field := t.Field(k)
-		val := v.Field(k)
+		value := v.Field(k)
 
-		key := field.Name
-		stringVal := readStringFromValue(val)
+		stringVal := readStringFromValue(value)
+		isMasked := shouldBeMasked(field)
 
-		if shouldBeMasked(field) {
+		if isMasked {
 			stringVal = fmt.Sprintf("[Masked - Length: %d]", len(stringVal))
 		}
 
-		fmt.Fprintf(out, "#| %s : %s\n", key, stringVal)
+		visit(ConfigEntry{
+			Key:   field.Name,
+			Value: stringVal,
+		})
 	}
 
-	fmt.Fprint(out, "### AppGofig Configuration End ###\n")
+	return nil
 }
 
-// CreateMarkdownFile creates a simple markdown table with information about the provided config inputs
+// WriteToMarkdownFile creates a simple markdown table with information about the provided config inputs.
 func WriteToMarkdownFile(targetConfig any, configDescriptions map[string]string, markdownFilePath string) error {
 	if targetConfig == nil {
 		return fmt.Errorf("unable to create config markdown file (%q): config is nil", markdownFilePath)
@@ -253,7 +265,7 @@ func WriteMarkdownOverviewTable(targetConfig any, configDescriptions map[string]
 	}
 }
 
-// CreateYamlExampleFile creates an example yaml file with comments providing the description and applied defaults
+// WriteToYamlExampleFile creates an example yaml file with comments providing the description and applied defaults.
 func WriteToYamlExampleFile(targetConfig any, configDescriptions map[string]string, yamlExampleFilePath string) error {
 	if targetConfig == nil {
 		return fmt.Errorf("unable to create example config yaml file (%q): config is nil", yamlExampleFilePath)
@@ -341,33 +353,33 @@ func checkForEmptyRequiredFields(targetConfig any) error {
 	return nil
 }
 
-// shouldBeMasked returns true if the field has a "mask" tag
-func shouldBeMasked(field reflect.StructField) bool {
-	maskTag, hasMaskTag := field.Tag.Lookup("mask")
-	if !hasMaskTag {
+// hasBooleanTagSet returns true if any of the tagsToCheck contains a string value that strconv.ParseBool would parse to true.
+// returns false otherwise. Priority is: first ok tag in tagsToCheck gets the win.
+func hasBooleanTagSet(field reflect.StructField, tagsToCheck []string) bool {
+	if len(tagsToCheck) == 0 {
 		return false
 	}
 
-	boolVal, _ := strconv.ParseBool(maskTag)
-
-	return boolVal
-}
-
-// isRequiredField checks if field has a tag "req" or "required" and returns true only
-// if one of them is ok for strconv.ParseBool being true, false otherwise.
-// "req" takes prio if both are present.
-func isRequiredField(field reflect.StructField) bool {
-	reqVal, ok := field.Tag.Lookup("req")
-	if !ok {
-		reqVal, ok = field.Tag.Lookup("required")
-		if !ok {
-			return false
+	for _, tagName := range tagsToCheck {
+		tagValue, ok := field.Tag.Lookup(tagName)
+		if ok {
+			if boolVal, err := strconv.ParseBool(tagValue); err != nil {
+				return false
+			} else {
+				return boolVal
+			}
 		}
 	}
 
-	if boolVal, err := strconv.ParseBool(reqVal); err != nil {
-		return false
-	} else {
-		return boolVal
-	}
+	return false
+}
+
+// shouldBeMasked uses hasBooleanTagSet to check ["masked", "mask"] in a fields tag
+func shouldBeMasked(field reflect.StructField) bool {
+	return hasBooleanTagSet(field, []string{"masked", "mask"})
+}
+
+// isRequiredField uses hasBooleanTagSet to check ["required", "req"] in a fields tag
+func isRequiredField(field reflect.StructField) bool {
+	return hasBooleanTagSet(field, []string{"required", "req"})
 }

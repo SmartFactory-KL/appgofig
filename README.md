@@ -3,7 +3,7 @@
 Using a struct (and one optional description map) as single source of truth to add configuration to Go applications.
 
 > [!note]
-> This is a very simplistic approach to adding simple key:value pair style configuration to your applications. Nothing more, nothing less.
+> This is a very simplistic approach to adding simple key:value pair style configuration to your applications. Nothing more, nothing less. No nesting or anything is possible with this.
 
 # Install
 
@@ -37,8 +37,6 @@ cfg := &Config{}
 if err := appgofig.ReadConfig(cfg); err != nil {
 	log.Fatal(err)
 }
-
-appgofig.LogConfig(cfg, os.Stdout)
 ```
 
 > [!caution]
@@ -48,6 +46,20 @@ Now, using your config should be as easy as accessing the struct itself:
 
 ```go
 log.Println(cfg.MyOwnSetting)
+```
+
+## Logging your config
+
+Starting with v0.3.0, the `LogConfig()` method has been replaced with `VisitConfigEntries()` to decouple from logging solutions.
+
+This snippet will show you how to log all configuration entries using `VisitConfigEntries()`:
+
+```go
+if err := appgofig.VisitConfigEntries(cfg, func(entry appgofig.ConfigEntry) {
+	fmt.Fprintf(os.Stdout, "%s=%s\n", entry.Key, entry.Value)
+}); err != nil {
+	log.Fatal(err)
+}
 ```
 
 ## The `Config` struct
@@ -60,7 +72,7 @@ The following tags are usable:
 | `env`               | Key used for Environment Variables. If omitted or empty, it defaults to the field name                                   |
 | `default`           | String representation of a default value. For `int`, `float64`, and `bool`, a parseable value should be provided         |
 | `req` or `required` | If set to "true", this config setting cannot be empty. Only applies to string values and is ignored on non-string values |
-| `mask`              | If set to "true", this will mask the value of a field when using `LogConfig()`                                           |
+| `mask` or `masked`  | If set to "true", this will mask the value of a field when using `VisitConfigEntries()`                                  |
 
 Example entry:
 
@@ -108,6 +120,12 @@ defaultYamlPaths := []string{"config.yml", "config.yaml", "config/config.yml", "
 > [!important]
 > To keep it simple, only flat key:value pair YAMLs are allowed. No nesting should be there.
 
+YAML keys must match the Go struct field names exactly, for example `MyOwnSetting`.
+The `env` tag only affects environment lookup and does not rename YAML keys.
+
+Environment-based reads also attempt to load values from a local `.env` file first.
+This applies to `ReadModeEnvOnly`, `ReadModeEnvThenYaml`, and `ReadModeYamlThenEnv`.
+
 # Documentation
 
 Two methods are provided to automatically create documentation about your configuration.
@@ -123,9 +141,9 @@ if err := appgofig.WriteToMarkdownFile(cfg, configDescriptions, "example/Markdow
 }
 ```
 
-### Example config.yaml
+### Example config YAML
 
-Similarly, using `WriteToYamlExampleFile()` will get you a config.yml example with comments explaining each entry
+Similarly, using `WriteToYamlExampleFile()` will generate an example YAML file with comments explaining each entry.
 
 ```go
 if err := appgofig.WriteToYamlExampleFile(cfg, configDescriptions, "example/ConfigYamlExample.yaml"); err != nil {
