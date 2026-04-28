@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -17,6 +18,15 @@ var configDescriptions map[string]string = map[string]string{
 	"MyStringSetting": "This is just a string setting that is empty but required.",
 }
 
+func printConfig(cfg *Config) {
+	fmt.Println("Configuration Output:")
+	if err := appgofig.VisitConfigEntries(cfg, func(entry appgofig.ConfigEntry) {
+		fmt.Fprintf(os.Stdout, "%s=%s\n", entry.Key, entry.Value)
+	}); err != nil {
+		log.Fatal(err)
+	}
+}
+
 func main() {
 	cfg := &Config{}
 
@@ -24,7 +34,7 @@ func main() {
 	if err := appgofig.ReadConfig(cfg); err != nil {
 		log.Fatal(err)
 	}
-	appgofig.LogConfig(cfg, os.Stdout)
+	printConfig(cfg)
 
 	// documentation helper functions
 	appgofig.WriteToMarkdownFile(cfg, configDescriptions, "example/MarkdownExample.md")
@@ -41,7 +51,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	appgofig.LogConfig(nextCfg, os.Stdout)
+	printConfig(nextCfg)
 
 	// showcasing map input
 	testCfg := &Config{}
@@ -56,5 +66,5 @@ func main() {
 		log.Fatal(err)
 	}
 
-	appgofig.LogConfig(testCfg, os.Stdout)
+	printConfig(testCfg)
 }
