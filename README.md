@@ -1,3 +1,5 @@
+[![codecov](https://codecov.io/github/SmartFactory-KL/appgofig/branch/main/graph/badge.svg?token=JORBSOKMZX)](https://codecov.io/github/SmartFactory-KL/appgofig)
+
 # AppGofig (AppConfig for Go)
 
 Using a struct (and one optional description map) as single source of truth to add configuration to Go applications.
