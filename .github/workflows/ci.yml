@@ -21,7 +21,7 @@ jobs:
       - name: Run test
         run: go test $(go list ./... | grep -v /example) -coverprofile=coverage.out
 
-      - name: Upload coverage reports to Codecov
+      - name: Upload coverage reports to Codecov service
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.SFKL_CODECOV_SECRET }}
