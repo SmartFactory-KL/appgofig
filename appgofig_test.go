@@ -1,438 +1,406 @@
 package appgofig
 
-/**
- * Disclaimer: AI was used to generate parts of these tests.
- */
-
 import (
+	"fmt"
 	"os"
-	"reflect"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
-type TestConfig struct {
-	StringVal string  `default:"defaultStr" env:"TEST_STRING" req:"true"`
-	IntVal    int     `default:"42" env:"TEST_INT"`
-	BoolVal   bool    `default:"true" env:"TEST_BOOL"`
-	SecretVal string  `default:"topsecret" env:"TEST_SECRET" mask:"true"`
-	FloatVal  float64 `default:"0.1" env:"TEST_FLOAT"`
+type appgofigTestConfig struct {
+	Name   string `default:"default-app" env:"APP_NAME"`
+	Port   int    `default:"8080" required:"true"`
+	Debug  bool   `default:"false"`
+	Secret string `default:"secret" masked:"true"`
+
+	BoolValue   bool    `default:""`
+	IntValue    int     `default:"1"`
+	FloatValue  float64 `default:"1.5"`
+	StringValue string  `default:"HelloWorld"`
 }
 
-type TestEmptyEnvTagConfig struct {
-	StringVal string `default:"defaultStr" env:""`
-}
+func TestReadConfigUsesDefaults(t *testing.T) {
+	cfg := &appgofigTestConfig{}
 
-// Helper to reset environment variables
-func resetEnv() {
-	os.Unsetenv("TEST_STRING")
-	os.Unsetenv("TEST_INT")
-	os.Unsetenv("TEST_BOOL")
-	os.Unsetenv("TEST_SECRET")
-	os.Unsetenv("TEST_FLOAT")
-}
-
-func TestInvalids(t *testing.T) {
-	resetEnv()
-
-	var cfg any
-	err := ReadConfig(cfg)
-	if err == nil {
-		t.Fatal("expected any to not work, got no error instead")
-	}
-
-	newCfg := TestConfig{}
-	err = ReadConfig(newCfg)
-	if err == nil {
-		t.Fatal("expected non-pointer to not work, got no error instead")
-	}
-
-	type TestInvalidType struct {
-		StringVal    string `default:"defaultString"`
-		NonValidType any    `default:"0"`
-	}
-	invalidCfg := &TestInvalidType{}
-	err = ReadConfig(invalidCfg)
-	if err == nil {
-		t.Fatalf("expected invalid type to not work, git no error instead")
-	}
-}
-
-func TestDefaults(t *testing.T) {
-	resetEnv()
-	cfg := &TestConfig{}
-	err := ReadConfig(cfg)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if cfg.StringVal != "defaultStr" {
-		t.Errorf("expected StringVal=defaultStr, got %s", cfg.StringVal)
-	}
-	if cfg.IntVal != 42 {
-		t.Errorf("expected IntVal=42, got %d", cfg.IntVal)
-	}
-	if cfg.BoolVal != true {
-		t.Errorf("expected BoolVal=true, got %v", cfg.BoolVal)
-	}
-	if cfg.FloatVal != 0.1 {
-		t.Errorf("expected FloatVal=true, got %v", cfg.FloatVal)
-	}
-}
-
-func TestRequiredField(t *testing.T) {
-	resetEnv()
-	cfg := &TestConfig{}
-
-	os.Setenv("TEST_STRING", "")
-
-	err := ReadConfig(cfg, WithReadMode(ReadModeEnvOnly))
-	if err == nil {
-		t.Fatal("expected error due to required string, got nil")
-	}
-	if !strings.Contains(err.Error(), "required field StringVal") {
-		t.Errorf("unexpected error message: %v", err)
-	}
-}
-
-func TestVisitConfigMasking(t *testing.T) {
-	resetEnv()
-	cfg := &TestConfig{}
 	if err := ReadConfig(cfg); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("ReadConfig() returned unexpected error: %v", err)
 	}
 
-	entries := map[string]string{}
-	if err := VisitConfigEntries(cfg, func(entry ConfigEntry) {
-		entries[entry.Key] = entry.Value
-	}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if cfg.Name != "default-app" {
+		t.Errorf("AppName = %q, want %q", cfg.Name, "default-app")
 	}
 
-	if !strings.Contains(entries["SecretVal"], "[Masked") {
-		t.Errorf("expected secret field to be masked, got: %s", entries["SecretVal"])
+	if cfg.Port != 8080 {
+		t.Errorf("Port = %d, want %d", cfg.Port, 8080)
 	}
-	if entries["StringVal"] != "defaultStr" {
-		t.Errorf("expected StringVal=defaultStr, got %s", entries["StringVal"])
+
+	if cfg.Debug {
+		t.Errorf("Debug = true, want false")
 	}
 }
 
-func TestVisitConfigEntries(t *testing.T) {
-	cfg := &TestConfig{
-		StringVal: "custom-string",
-		IntVal:    123,
-		BoolVal:   false,
-		SecretVal: "supersecret",
-		FloatVal:  9.5,
+func TestReadConfigRejectsUnexportedFields(t *testing.T) {
+	type configWithPrivateField struct {
+		Name   string `default:"app"`
+		secret string `default:"hidden"`
 	}
 
-	var entries []ConfigEntry
-	if err := VisitConfigEntries(cfg, func(entry ConfigEntry) {
+	err := ReadConfig(&configWithPrivateField{})
+
+	if err == nil {
+		t.Fatal("ReadConfig expected an error for an unexported field")
+	}
+
+	if !strings.Contains(err.Error(), "must be exported") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestVisitRejectsUnexportedFields(t *testing.T) {
+	type configWithPrivateField struct {
+		Name   string `default:"app"`
+		secret string `default:"hidden"`
+	}
+
+	err := VisitConfigEntries(&configWithPrivateField{}, func(ace AppConfigEntry) {})
+
+	if err == nil {
+		t.Fatal("VisitConfigEntries expected an error for an unexported field")
+	}
+}
+
+func TestReadConfigRejectsMalformedBool(t *testing.T) {
+	t.Setenv("BOOL_VALUE", "nonsense")
+
+	cfg := &appgofigTestConfig{}
+
+	if err := ReadConfig(cfg, WithSources(EnvironmentSource())); err == nil {
+		t.Fatalf("ReadConfig expected Error for malformed bool")
+	}
+}
+
+func TestReadConfigRejectsMalformedInt(t *testing.T) {
+	t.Setenv("INT_VALUE", "nonsense")
+
+	cfg := &appgofigTestConfig{}
+
+	if err := ReadConfig(cfg, WithSources(EnvironmentSource())); err == nil {
+		t.Fatalf("ReadConfig expected Error for malformed int")
+	}
+}
+
+func TestReadConfigRejectsMalformedFloat64(t *testing.T) {
+	t.Setenv("FLOAT_VALUE", "nonsense")
+
+	cfg := &appgofigTestConfig{}
+
+	if err := ReadConfig(cfg, WithSources(EnvironmentSource())); err == nil {
+		t.Fatalf("ReadConfig expected Error for malformed float64")
+	}
+}
+
+func TestReadConfigAppliesEnvironmentValues(t *testing.T) {
+	t.Setenv("APP_APP_NAME", "environment-app")
+	t.Setenv("APP_PORT", "9090")
+	t.Setenv("APP_DEBUG", "true")
+
+	cfg := &appgofigTestConfig{}
+
+	err := ReadConfig(
+		cfg,
+		WithSources(
+			PrefixedEnvironmentSource("APP"),
+		),
+	)
+	if err != nil {
+		t.Fatalf("ReadConfig() returned unexpected error: %v", err)
+	}
+
+	if cfg.Name != "environment-app" {
+		t.Errorf("AppName = %q, want %q", cfg.Name, "environment-app")
+	}
+
+	if cfg.Port != 9090 {
+		t.Errorf("Port = %d, want %d", cfg.Port, 9090)
+	}
+
+	if !cfg.Debug {
+		t.Errorf("Debug = false, want true")
+	}
+
+	if cfg.Secret != "secret" {
+		t.Errorf("Secret = %q, want %q", cfg.Secret, "secret")
+	}
+}
+
+func TestReadConfigAppliesYAMLValues(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	yamlPath := filepath.Join("config.yaml")
+	yamlContent := []byte("Secret: yaml-secret\nFloatValue: 2.5\n")
+
+	if err := os.WriteFile(yamlPath, yamlContent, 0600); err != nil {
+		t.Fatalf("failed to write test YAML: %v", err)
+	}
+
+	t.Cleanup(func() {
+		if err := os.Remove(yamlPath); err != nil {
+			t.Log("failed to remove test file")
+		}
+	})
+
+	cfg := &appgofigTestConfig{}
+
+	err := ReadConfig(
+		cfg,
+		WithSources(YAMLSource()),
+	)
+	if err != nil {
+		t.Fatalf("ReadConfig() returned unexpected error: %v", err)
+	}
+
+	if cfg.Port != 8080 {
+		t.Errorf("Port = %q, want default value of %q", cfg.Port, 8080)
+	}
+
+	if cfg.Secret != "yaml-secret" {
+		t.Errorf("Secret = %q, want %q", cfg.Secret, "secret")
+	}
+
+	if cfg.FloatValue != 2.5 {
+		t.Errorf("FloatValue = %f, want %f", cfg.FloatValue, 2.5)
+	}
+}
+
+func TestReadConfigAppliesEnvironmentAndYAMLValuesFromSpecificFile(t *testing.T) {
+	t.Setenv("APP_APP_NAME", "environment-app")
+	t.Setenv("APP_PORT", "9090")
+	t.Setenv("APP_DEBUG", "true")
+	t.Setenv("APP_SECRET", "env-secret")
+
+	yamlPath := filepath.Join(t.TempDir(), "my_own_config.yml")
+	yamlContent := []byte("Secret: yaml-secret\n")
+
+	if err := os.WriteFile(yamlPath, yamlContent, 0600); err != nil {
+		t.Fatalf("failed to write test YAML: %v", err)
+	}
+
+	cfg := &appgofigTestConfig{}
+
+	err := ReadConfig(
+		cfg,
+		WithSources(
+			PrefixedEnvironmentSource("APP"),
+			SpecificYAMLSource(yamlPath),
+		),
+	)
+	if err != nil {
+		t.Fatalf("ReadConfig() returned unexpected error: %v", err)
+	}
+
+	if cfg.Name != "environment-app" {
+		t.Errorf("AppName = %q, want %q", cfg.Name, "environment-app")
+	}
+
+	if cfg.Port != 9090 {
+		t.Errorf("Port = %d, want %d", cfg.Port, 9090)
+	}
+
+	if !cfg.Debug {
+		t.Errorf("Debug = false, want true")
+	}
+
+	if cfg.Secret != "yaml-secret" {
+		t.Errorf("Secret = %q, want %q", cfg.Secret, "secret")
+	}
+}
+
+func TestReadConfigAppliesOverridesLast(t *testing.T) {
+	t.Setenv("APP_PORT", "9090")
+
+	cfg := &appgofigTestConfig{}
+
+	err := ReadConfig(
+		cfg,
+		WithSources(
+			PrefixedEnvironmentSource("APP"),
+		),
+		WithOverrides(map[string]string{
+			"Port": "7070",
+		}),
+	)
+	if err != nil {
+		t.Fatalf("ReadConfig() returned unexpected error: %v", err)
+	}
+
+	if cfg.Port != 7070 {
+		t.Errorf("Port = %d, want %d", cfg.Port, 7070)
+	}
+}
+
+func TestReadConfigRejectsMissingOverrideKey(t *testing.T) {
+	cfg := &appgofigTestConfig{}
+
+	err := ReadConfig(
+		cfg,
+		WithOverrides(map[string]string{
+			"NotExisting": "7070",
+		}),
+	)
+	if err == nil {
+		t.Fatalf("ReadConfig() expected error for non-existing override key")
+	}
+}
+
+func TestReadConfigRejectsEmptyRequiredOverrideKey(t *testing.T) {
+	type MiniConfig struct {
+		Port int `default:"8080" required:"true"`
+	}
+
+	err := ReadConfig(
+		&MiniConfig{},
+		WithOverrides(map[string]string{
+			"Port": "",
+		}),
+	)
+	if err == nil {
+		t.Fatalf("ReadConfig() expected error for empty required override key")
+	}
+}
+
+func TestReadConfigChecksRequiredFields(t *testing.T) {
+	type appgofigTestWithRequired struct {
+		AppName       string `default:"default-app" env:"APP_NAME"`
+		RequiredInput string `required:"true"`
+	}
+
+	err := ReadConfig(&appgofigTestWithRequired{})
+
+	if err == nil {
+		t.Fatal("ReadCOnfig() expected an error for missing required fields")
+	}
+
+	if !strings.Contains(err.Error(), "missing") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestReadConfigRejectsInvalidFieldType(t *testing.T) {
+	type appgofigTestWithRequired struct {
+		AppName       []int   `default:"default-app" env:"APP_NAME"`
+		RequiredInput float32 `required:"true"`
+	}
+
+	err := ReadConfig(&appgofigTestWithRequired{})
+
+	if err == nil {
+		t.Fatal("ReadCOnfig() expected an error for invalid field type")
+	}
+
+	if !strings.Contains(err.Error(), "invalid") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+type ErrorSource struct{}
+
+func (src *ErrorSource) Load(map[string]*AppConfigEntry) (map[string]string, error) {
+	return nil, fmt.Errorf("test error!")
+}
+
+func TestReadConfigRejectsOptionError(t *testing.T) {
+	errSource := ErrorSource{}
+	err := ReadConfig(&appgofigTestConfig{}, WithSources(&errSource))
+
+	if err == nil {
+		t.Fatal("ReadCOnfig() expected an error for an option erroring out")
+	}
+}
+
+func TestVisitConfigEntriesMasksValues(t *testing.T) {
+	cfg := &appgofigTestConfig{
+		Name:   "test-app",
+		Port:   1234,
+		Debug:  true,
+		Secret: "top-secret",
+	}
+
+	var entries []AppConfigEntry
+
+	err := VisitConfigEntries(cfg, func(entry AppConfigEntry) {
 		entries = append(entries, entry)
-	}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	})
+	if err != nil {
+		t.Fatalf("VisitConfigEntries() returned unexpected error: %v", err)
 	}
 
-	expected := []ConfigEntry{
-		{Key: "StringVal", Value: "custom-string"},
-		{Key: "IntVal", Value: "123"},
-		{Key: "BoolVal", Value: "false"},
-		{Key: "SecretVal", Value: "[Masked - Length: 11]"},
-		{Key: "FloatVal", Value: "9.5"},
+	var secretEntry AppConfigEntry
+	for _, entry := range entries {
+		if entry.Key == "Secret" {
+			secretEntry = entry
+			break
+		}
 	}
 
-	if !reflect.DeepEqual(entries, expected) {
-		t.Fatalf("unexpected entries: got %#v want %#v", entries, expected)
+	if secretEntry.Value != "[Masked (len: 10)]" {
+		t.Errorf("masked value = %q, want %q",
+			secretEntry.Value,
+			"[Masked (len: 10)]",
+		)
 	}
 }
 
-func TestInvalidReadModeYamlCombination(t *testing.T) {
-	resetEnv()
+func TestVisitConfigEntriesRejectsInvalidVisitFunc(t *testing.T) {
+	cfg := appgofigTestConfig{}
 
-	cfg := &TestConfig{}
-	err := ReadConfig(cfg, WithReadMode(ReadModeEnvOnly), WithYamlFile("config.yml"))
+	err := VisitConfigEntries(&cfg, nil)
+
 	if err == nil {
-		t.Fatal("expected error, got none")
+		t.Fatalf("Expected error when using VisitConfigEntries with invalid visit func")
 	}
 }
 
-func TestYamlExampleAndMarkdownGeneration(t *testing.T) {
-	resetEnv()
-	cfg := &TestConfig{}
-	ReadConfig(cfg)
+func TestCreateConfigDocumentation(t *testing.T) {
+	cfg := &appgofigTestConfig{}
+	outputDir := t.TempDir()
 
-	mdFile := "test.md"
-	yamlFile := "test.yaml"
-
-	defer os.Remove(mdFile)
-	defer os.Remove(yamlFile)
-
-	configDescriptions := map[string]string{
-		"StringVal": "A required string value",
-		"IntVal":    "An integer value",
-		"BoolVal":   "A boolean value",
-		"SecretVal": "Should be masked",
+	descriptions := map[string]string{
+		"AppName": "The application name.",
+		"Port":    "The application port.",
 	}
 
-	if err := WriteToMarkdownFile(cfg, configDescriptions, mdFile); err != nil {
-		t.Fatalf("WriteToMarkdownFile failed: %v", err)
+	if err := CreateConfigDocumentation(cfg, descriptions, outputDir); err != nil {
+		t.Fatalf("CreateConfigDocumentation() returned unexpected error: %v", err)
 	}
 
-	if err := WriteToYamlExampleFile(cfg, configDescriptions, yamlFile); err != nil {
-		t.Fatalf("WriteToYamlExampleFile failed: %v", err)
-	}
+	markdownPath := filepath.Join(outputDir, "DefaultDocumentation.md")
+	yamlPath := filepath.Join(outputDir, "config.example.yaml")
 
-	if _, err := os.Stat(mdFile); err != nil {
-		t.Fatalf("Markdown file not created: %v", err)
-	}
-	if _, err := os.Stat(yamlFile); err != nil {
-		t.Fatalf("YAML example file not created: %v", err)
+	for _, path := range []string{markdownPath, yamlPath} {
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("expected documentation file %q: %v", path, err)
+		}
 	}
 }
 
-func TestReadModeEnvOnly(t *testing.T) {
-	resetEnv()
-	os.Setenv("TEST_STRING", "envOnly")
-	cfg := &TestConfig{}
-	err := ReadConfig(cfg, WithReadMode(ReadModeEnvOnly))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.StringVal != "envOnly" {
-		t.Errorf("expected StringVal=envOnly, got %s", cfg.StringVal)
+func TestCreateConfigDocumentationRejectsInvalidInput(t *testing.T) {
+	cfg := appgofigTestConfig{}
+	if err := CreateConfigDocumentation(&cfg, nil, ""); err == nil {
+		t.Fatalf("CreateConfigDocumentation expected error in invalid config")
 	}
 }
 
-func TestEmptyEnvTagFallsBackToFieldName(t *testing.T) {
-	resetEnv()
-	os.Setenv("StringVal", "fieldNameEnv")
-
-	cfg := &TestEmptyEnvTagConfig{}
-	if err := ReadConfig(cfg, WithReadMode(ReadModeEnvOnly)); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if cfg.StringVal != "fieldNameEnv" {
-		t.Errorf("expected StringVal=fieldNameEnv, got %s", cfg.StringVal)
+func TestCreateConfigExampleYAMLRejectsInvalidInput(t *testing.T) {
+	cfg := appgofigTestConfig{}
+	if err := CreateConfigExampleYAML(&cfg, nil, ""); err == nil {
+		t.Fatalf("CreateConfigDocumentation expected error in invalid config")
 	}
 }
 
-func TestReadModeYamlOnly(t *testing.T) {
-	resetEnv()
-
-	cfg := &TestConfig{}
-
-	yamlFile, err := os.Create("config.yml")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	defer os.Remove(yamlFile.Name())
-
-	yamlFile.WriteString("IntVal: 1000")
-
-	if err := ReadConfig(cfg, WithReadMode(ReadModeYamlOnly)); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if cfg.IntVal != 1000 {
-		t.Errorf("expected IntVal=1000, got %d", cfg.IntVal)
-	}
-}
-
-func TestReadModeYamlOnlyWithSpecifiedFile(t *testing.T) {
-	resetEnv()
-
-	cfg := &TestConfig{}
-
-	yamlFile, err := os.Create("my_own_file.yml")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	defer os.Remove(yamlFile.Name())
-
-	yamlFile.WriteString("IntVal: 2000")
-
-	if err := ReadConfig(cfg, WithReadMode(ReadModeYamlOnly), WithYamlFile("my_own_file.yml")); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if cfg.IntVal != 2000 {
-		t.Errorf("expected IntVal=2000, got %d", cfg.IntVal)
-	}
-}
-
-func TestReadModeYamlOnlyWithInvalidFile(t *testing.T) {
-	resetEnv()
-	cfg := &TestConfig{}
-	if err := ReadConfig(cfg, WithReadMode(ReadModeYamlOnly), WithYamlFile("")); err == nil {
-		t.Fatal("expected error but got none")
-	}
-
-	if err := ReadConfig(cfg, WithReadMode(ReadModeYamlOnly), WithYamlFile("non-existing.yml")); err == nil {
-		t.Fatal("expected error but got none")
-	}
-
-	yamlFile, err := os.Create("my_own_file.yml")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	defer os.Remove(yamlFile.Name())
-
-	invalidYaml := "# Missing colon after key\nStringVal \"missing_colon\"\n\n# Invalid indentation\nIntVal:\n  - 42\n   - 43\n\n# Unexpected character\nBoolVal: tru!!"
-	yamlFile.WriteString(invalidYaml)
-
-	if err := ReadConfig(cfg, WithReadMode(ReadModeYamlOnly), WithYamlFile("my_own_file.yml")); err == nil {
-		t.Fatal("expected error but got none")
-	}
-}
-
-func TestReadModeYamlThenEnv(t *testing.T) {
-	resetEnv()
-	cfg := &TestConfig{}
-
-	// Env overrides
-	os.Setenv("TEST_STRING", "envVal")
-	os.Setenv("TEST_INT", "777")
-
-	// yaml starts
-	yamlFile, err := os.Create("config.yml")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	defer os.Remove(yamlFile.Name())
-
-	yamlFile.WriteString("IntVal: 1000\n")
-	yamlFile.WriteString("StringVal: yamlVal\n")
-
-	err = ReadConfig(cfg, WithReadMode(ReadModeYamlThenEnv))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if cfg.StringVal != "envVal" {
-		t.Errorf("expected StringVal=envVal, got %s", cfg.StringVal)
-	}
-	if cfg.IntVal != 777 {
-		t.Errorf("expected IntVal=777, got %d", cfg.IntVal)
-	}
-}
-
-func TestReadModeEnvThenYaml(t *testing.T) {
-	resetEnv()
-	cfg := &TestConfig{}
-
-	// Env overrides
-	os.Setenv("TEST_STRING", "envVal")
-	os.Setenv("TEST_INT", "777")
-
-	// yaml starts
-	yamlFile, err := os.Create("config.yml")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	defer os.Remove(yamlFile.Name())
-
-	yamlFile.WriteString("IntVal: 1000\n")
-	yamlFile.WriteString("StringVal: yamlVal\n")
-
-	err = ReadConfig(cfg, WithReadMode(ReadModeEnvThenYaml))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if cfg.StringVal != "yamlVal" {
-		t.Errorf("expected StringVal=yamlVal, got %s", cfg.StringVal)
-	}
-	if cfg.IntVal != 1000 {
-		t.Errorf("expected IntVal=1000, got %d", cfg.IntVal)
-	}
-}
-
-func TestMapInputOnly(t *testing.T) {
-	resetEnv()
-	cfg := &TestConfig{}
-
-	mapInputVals := map[string]string{
-		"StringVal": "custom",
-		"IntVal":    "999",
-	}
-	err := ReadConfig(cfg,
-		WithReadMode(ReadModeMapInputOnly),
-		WithMapInput(mapInputVals),
-	)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if cfg.StringVal != "custom" {
-		t.Errorf("expected StringVal=custom, got %s", cfg.StringVal)
-	}
-	if cfg.IntVal != 999 {
-		t.Errorf("expected IntVal=999, got %d", cfg.IntVal)
-	}
-}
-
-func TestMapInputIncorrectReadMode(t *testing.T) {
-	resetEnv()
-	cfg := &TestConfig{}
-
-	mapInputVals := map[string]string{
-		"StringVal": "custom",
-		"IntVal":    "999",
-	}
-	err := ReadConfig(cfg,
-		WithReadMode(ReadModeEnvOnly),
-		WithMapInput(mapInputVals),
-	)
-	if err == nil {
-		t.Fatalf("expected error, got none")
-	}
-}
-
-func TestBooleanParsing(t *testing.T) {
-	resetEnv()
-	cfg := &TestConfig{}
-	os.Setenv("TEST_BOOL", "true")
-	err := ReadConfig(cfg)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.BoolVal != true {
-		t.Errorf("expected BoolVal=true, got %v", cfg.BoolVal)
-	}
-
-	os.Setenv("TEST_BOOL", "false")
-	err = ReadConfig(cfg)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.BoolVal != false {
-		t.Errorf("expected BoolVal=false, got %v", cfg.BoolVal)
-	}
-}
-
-func TestIntParsingErrors(t *testing.T) {
-	resetEnv()
-	os.Setenv("TEST_INT", "notanumber")
-	cfg := &TestConfig{}
-	err := ReadConfig(cfg)
-	if err == nil {
-		t.Fatal("expected error for invalid int value, got nil")
-	}
-	if !strings.Contains(err.Error(), "cannot use notanumber as int") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestFloatParsingErrors(t *testing.T) {
-	resetEnv()
-	os.Setenv("TEST_FLOAT", "notanumber")
-	cfg := &TestConfig{}
-	err := ReadConfig(cfg)
-	if err == nil {
-		t.Fatal("expected error for invalid int value, got nil")
-	}
-	if !strings.Contains(err.Error(), "cannot use notanumber as float") {
-		t.Errorf("unexpected error: %v", err)
+func TestCreateConfigMarkdownDocumentRejectsInvalidInput(t *testing.T) {
+	cfg := appgofigTestConfig{}
+	if err := CreateConfigMarkdownDocument(&cfg, nil, ""); err == nil {
+		t.Fatalf("CreateConfigDocumentation expected error in invalid config")
 	}
 }

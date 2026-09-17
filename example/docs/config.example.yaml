@@ -1,0 +1,12 @@
+# Config Example YAML
+# Auto generated file. Please provide your own values here
+
+# MyOwnSetting [int]
+# This is just a simple example description so this map is not empty
+MyOwnSetting: "42"
+
+# MyStringSetting [string - required]
+# This is just a string setting that is empty but required.
+MyStringSetting: "defaultStringSetting"
+
+# End of auto generated file
