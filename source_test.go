@@ -68,7 +68,7 @@ unknown: value
 				t.Fatalf("failed to write test YAML: %v", err)
 			}
 
-			source := YAMLSource(filePath)
+			source := SpecificYAMLSource(filePath)
 			got, err := source.Load(tt.config)
 
 			if (err != nil) != tt.wantErr {
@@ -85,7 +85,7 @@ unknown: value
 func TestYAMLSource_LoadMissingFile(t *testing.T) {
 	t.Parallel()
 
-	source := YAMLSource(filepath.Join(
+	source := SpecificYAMLSource(filepath.Join(
 		t.TempDir(),
 		"missing.yaml",
 	))
@@ -113,7 +113,7 @@ func TestEnvironmentSource_Load(t *testing.T) {
 		},
 	}
 
-	source := EnvironmentSource("app")
+	source := PrefixedEnvironmentSource("app")
 
 	got, err := source.Load(config)
 	if err != nil {
@@ -140,7 +140,7 @@ func TestEnvironmentSource_LoadExplicitEnvironmentKey(t *testing.T) {
 		},
 	}
 
-	source := EnvironmentSource("APP")
+	source := PrefixedEnvironmentSource("APP")
 
 	got, err := source.Load(config)
 	if err != nil {
@@ -168,7 +168,7 @@ func TestEnvironmentSource_LoadIgnoresMissingVariables(t *testing.T) {
 		},
 	}
 
-	source := EnvironmentSource("APP")
+	source := PrefixedEnvironmentSource("APP")
 
 	got, err := source.Load(config)
 	if err != nil {
@@ -195,7 +195,7 @@ func TestEnvironmentSource_LoadDoesNotMutateConfig(t *testing.T) {
 
 	original := *config["port"]
 
-	source := EnvironmentSource("APP")
+	source := PrefixedEnvironmentSource("APP")
 
 	_, err := source.Load(config)
 	if err != nil {
@@ -208,11 +208,4 @@ func TestEnvironmentSource_LoadDoesNotMutateConfig(t *testing.T) {
 			original,
 		)
 	}
-}
-
-func TestSourcesImplementAppGofigSource(t *testing.T) {
-	t.Parallel()
-
-	var _ AppGofigSource = YAMLSource()
-	var _ AppGofigSource = EnvironmentSource("")
 }

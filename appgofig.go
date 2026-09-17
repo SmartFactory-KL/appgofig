@@ -12,14 +12,17 @@ import (
 // ReadConfig takes any Config struct and a list of options. Based on this it first applies the default values
 // and then all sources in order, where later values overwrite earlier ones. At the end, values will be directly applied
 // to the Config itself, so only an error is returned.
-func ReadConfig(cfg any, optionList ...AppGofigOption) error {
+func ReadConfig[T any](cfg *T, optionList ...AppGofigOption) error {
 	// apply the options
+
 	gofigOptions := &AppGofigOptions{
 		Sources:   nil,
 		Overrides: nil,
 	}
 	for _, opt := range optionList {
-		opt(gofigOptions)
+		if opt != nil {
+			opt(gofigOptions)
+		}
 	}
 
 	// check validitiy of cfg input
@@ -31,7 +34,7 @@ func ReadConfig(cfg any, optionList ...AppGofigOption) error {
 	entryMap := readConfigDefaults(cfg)
 
 	// Load all sources in order
-	sourceMaps := make([]map[string]string, len(gofigOptions.Sources))
+	sourceMaps := make([]map[string]string, 0, len(gofigOptions.Sources))
 	if len(gofigOptions.Sources) != 0 {
 		// validate sources
 		for _, src := range gofigOptions.Sources {
@@ -56,11 +59,13 @@ func ReadConfig(cfg any, optionList ...AppGofigOption) error {
 
 	// Apply overrides at the end
 	if len(gofigOptions.Overrides) > 0 {
-		for cfgKey := range entryMap {
-			val, ok := gofigOptions.Overrides[cfgKey]
-			if ok {
-				entryMap[cfgKey].Value = val
+		for key, val := range gofigOptions.Overrides {
+			targetEntry, ok := entryMap[key]
+			if !ok {
+				return fmt.Errorf("Override contains key %s which does not exist on config", key)
 			}
+
+			targetEntry.Value = val
 		}
 	}
 
@@ -95,7 +100,7 @@ func ReadConfig(cfg any, optionList ...AppGofigOption) error {
 
 // VisitConfigEntries will run visit() once using AppConfigEntries with the actual value taken from cfg itself.
 // Any values marked as "IsMasked" will be converted to "[Masked (len:x)]" with x being the string length
-func VisitConfigEntries(cfg any, visit func(AppConfigEntry)) error {
+func VisitConfigEntries[T any](cfg *T, visit func(AppConfigEntry)) error {
 	// check validitiy of cfg input
 	if err := checkConfigStruct(cfg); err != nil {
 		return fmt.Errorf("failed to visit config values: %w", err)
@@ -108,7 +113,7 @@ func VisitConfigEntries(cfg any, visit func(AppConfigEntry)) error {
 	cfgValues := reflect.ValueOf(cfg).Elem()
 	defaultValues := readConfigDefaults(cfg)
 
-	// Sort entries for deterministic output.
+	// Preserve struct field order for deterministic output
 	keys := getConfigEntryKeys(cfg)
 
 	for _, cfgKey := range keys {
@@ -137,7 +142,7 @@ func VisitConfigEntries(cfg any, visit func(AppConfigEntry)) error {
 }
 
 // CreateConfigDocumentation will create all config documents using default paths and put them into the outputDir, creating it if needed
-func CreateConfigDocumentation(cfg any, cfgDescriptions map[string]string, outputDir string) error {
+func CreateConfigDocumentation[T any](cfg *T, cfgDescriptions map[string]string, outputDir string) error {
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return fmt.Errorf("failed to create output directory for config documentation: %w", err)
 	}
@@ -156,14 +161,18 @@ func CreateConfigDocumentation(cfg any, cfgDescriptions map[string]string, outpu
 }
 
 // CreateConfigExampleYAML creates an example yaml file with all config entries, adding the metadata as comments
-func CreateConfigExampleYAML(cfg any, cfgDescriptions map[string]string, outputPath string) error {
+func CreateConfigExampleYAML[T any](cfg *T, cfgDescriptions map[string]string, outputPath string) error {
 	if err := checkConfigStruct(cfg); err != nil {
 		return fmt.Errorf("failed to create documentation: %w", err)
 	}
 
+	if cfgDescriptions == nil {
+		cfgDescriptions = make(map[string]string)
+	}
+
 	entryMap := readConfigDefaults(cfg)
 
-	// Sort entries for deterministic output.
+	// Preserve struct field order for deterministic output
 	keys := getConfigEntryKeys(cfg)
 
 	var sb strings.Builder
@@ -204,14 +213,18 @@ func CreateConfigExampleYAML(cfg any, cfgDescriptions map[string]string, outputP
 // - A table with an overview of all config entries, including their environment key
 // - An example environment block for a Docker Compose file
 // - An example command for docker run containing all environment entries
-func CreateConfigMarkdownDocument(cfg any, cfgDescriptions map[string]string, outputPath string) error {
+func CreateConfigMarkdownDocument[T any](cfg *T, cfgDescriptions map[string]string, outputPath string) error {
 	if err := checkConfigStruct(cfg); err != nil {
 		return fmt.Errorf("failed to create documentation: %w", err)
 	}
 
+	if cfgDescriptions == nil {
+		cfgDescriptions = make(map[string]string)
+	}
+
 	entryMap := readConfigDefaults(cfg)
 
-	// Sort entries for deterministic output.
+	// Preserve struct field order for deterministic output
 	keys := getConfigEntryKeys(cfg)
 
 	var sb strings.Builder

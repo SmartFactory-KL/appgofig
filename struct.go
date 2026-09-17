@@ -27,6 +27,10 @@ func checkConfigStruct(cfg any) error {
 		return fmt.Errorf("config must point to a struct, instead got %s", v.Elem().Type())
 	}
 
+	if err := onlyContainsExportedFields(cfg); err != nil {
+		return fmt.Errorf("config contains invalid fields: %w", err)
+	}
+
 	if err := onlyContainsSupportedTypes(cfg); err != nil {
 		return fmt.Errorf("config contains invalid types: %w", err)
 	}
@@ -47,6 +51,21 @@ func onlyContainsSupportedTypes(cfg any) error {
 			continue
 		default:
 			return fmt.Errorf("invalid type %s on field %s", field.Type.Kind(), field.Name)
+		}
+	}
+
+	return nil
+}
+
+// onlyContainsExportedFields checks wether unexported fields are present in the struct. They are not allowed.
+func onlyContainsExportedFields(cfg any) error {
+	t := reflect.TypeOf(cfg).Elem()
+
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+
+		if field.PkgPath != "" {
+			return fmt.Errorf("field %s must be exported", field.Name)
 		}
 	}
 
@@ -156,13 +175,25 @@ func isRequiredField(field reflect.StructField) bool {
 
 // applyEntryToValue tries to set fieldVals value by converting cfgEntry.value to the desired type.
 func applyEntryToValue(field reflect.StructField, fieldVal reflect.Value, cfgEntry *AppConfigEntry) error {
+	if !fieldVal.CanSet() {
+		return fmt.Errorf("field %s cannot be set", field.Name)
+	}
+
 	switch field.Type.Kind() {
 	case reflect.String:
 		fieldVal.SetString(cfgEntry.Value)
 	case reflect.Bool:
-		boolVal, err := strconv.ParseBool(cfgEntry.Value)
-		if err != nil {
-			return fmt.Errorf("cannot use %s as bool: %w", cfgEntry.Value, err)
+		var boolVal bool
+		var err error
+		if len(cfgEntry.Value) == 0 {
+			// special case: Not having any value will be interpreted as "flag not set"
+			// without ParseBool since that would fail but empty value as false could be reasonable
+			boolVal = false
+		} else {
+			boolVal, err = strconv.ParseBool(cfgEntry.Value)
+			if err != nil {
+				return fmt.Errorf("cannot use %s as bool: %w", cfgEntry.Value, err)
+			}
 		}
 
 		fieldVal.SetBool(boolVal)

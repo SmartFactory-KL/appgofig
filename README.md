@@ -3,163 +3,274 @@
 # AppGofig (AppConfig for Go)
 
 Using a struct (and one optional description map) as single source of truth to add configuration to Go applications.
-
-> [!note]
-> This is a very simplistic approach to adding simple key:value pair style configuration to your applications. Nothing more, nothing less. No nesting or anything is possible with this.
+The approach is simplistic on purpose, supporting only flat configuration structures and only four field types: `string`, `int`, `float64`, `bool`.
+If you need more features there are probably dozens of proper configuration libraries for Go.
 
 # Install
-
-Should be a simple go get command:
 
 ```bash
 go get github.com/smartfactory-kl/appgofig
 ```
 
-# How to use
+# Quick Start
 
-First, create your Config and your ConfigDescriptions (optional, only needed for documentation):
+Basic Example:
+
+```go
+package main
+
+import (
+	"log"
+
+	"github.com/SmartFactory-KL/appgofig"
+)
+
+// Define the Config struct itself
+type Config struct {
+	AppName string  `default:"my-app"`
+	Port    int     `default:"8080"`
+	Debug   bool    `default:"false"`
+	Ratio   float64 `default:"1.0"`
+}
+
+func main() {
+	// instantiate
+	cfg := Config{}
+
+	// Read config from environment which changes the values of cfg
+	if err := appgofig.ReadConfig(&cfg, appgofig.WithSources(appgofig.EnvironmentSource())); err != nil {
+		log.Fatal(err)
+	}
+
+	// Config options are autocompleted
+	log.Println(cfg.AppName, cfg.Port, cfg.Debug, cfg.Ratio)
+}
+```
+
+## Struct Tags
+
+Most metadata is set using struct tags.
+
+### `default`
+
+Sets the initial value for a field. Needs to be the string representation.
+
+```
+Port int `default:"8080"`
+```
+
+### `env`
+
+Sets the Environment Key to look for. If omitted, the field name is converted to UPPER_SNAKE_CASE and used as Environment Key.
 
 ```go
 type Config struct {
-	MyOwnSetting    int  `default:"10" env:"MY_OWN_SETTING"`
-	MyStringSetting string `default:"hello" env:"MY_STRING_SETTING" req:"true"`
-}
-
-var configDescriptions map[string]string = map[string]string{
-	"MyOwnSetting":    "This is just a simple example description so this map is not empty",
-	"MyStringSetting": "This is just a string setting that is empty but required.",
+	AppName string `env:"APPLICATION_NAME"` // will be looking for APPLICATION_NAME
+	HTTPPort int // will be looking for HTTP_PORT
 }
 ```
 
-Next, instantiate your config and then read the config values by calling `ReadConfig()`:
+> [!note]
+> Note that an optional Environment Prefix will still be added to both variants
+
+### `required`, `require`, `req`
+
+Setting this to `true` requires a field to not be empty before type conversion.
+
+> [!note]
+> Empty values for booleans are considered to be false
 
 ```go
-cfg := &Config{}
+APIKey string `required:"true"`
+```
 
-if err := appgofig.ReadConfig(cfg); err != nil {
+### `masked`, `mask`
+
+Setting this to `true` masks the value of the field when using `VisitConfigEntries`.
+
+```go
+APIKey string `masked:"true"`
+```
+
+## Configuration Sources
+
+Specifying no sources will simply return a config with all default values.
+To specify a source, use the `WithSources()` option.
+
+### Environment as source
+
+Two variants are available:
+
+```go
+// Using no Prefix
+appgofig.WithSources(
+	appgofig.EnvironmentSource()
+)
+
+// Using a Prefix on all Keys
+appgofig.WithSources(
+	appgofig.PrefixedEnvironmentSource("MY_PREFIX")
+)
+```
+
+For a field tagged with `env:"APPLICATION_NAME"` this would result in the following keys to look up:
+
+- EnvironmentSource -> `APPLICATION_NAME`
+- PrefixedEnvironmentSource -> `MY_PREFIX_APPLICATION_NAME`
+
+### YAML file as source
+
+The YAMLSource can either use predefined default file paths or a single specified one:
+
+```go
+// Using the first match of the defaults
+appgofig.WithSources(
+	appgofig.YAMLSource()
+)
+
+// Using a single file specified by its path
+appgofig.WithSources(
+	appgofig.SpecificYAMLSource("config.dev.yml")
+)
+```
+
+The default file paths are (in order)
+
+- `config.yml`
+- `config.yaml`
+- `config/config.yml`
+- `config/config.yaml`
+
+YAML Keys must match the Go struct field name exactly and it must contain a flat hierarchy. Nested objects are not supported.
+
+```yaml
+AppName: yaml-app
+Port: 9000
+Debug: true
+```
+
+## Overrides
+
+Another option is `WithOverrides`, containing a `map[string]string` that will always applied last.
+
+```go
+appgofig.WithOverrides(map[string]string{
+	"AppVersion": "1.0.0-rc4",
+})
+```
+
+## Combining sources
+
+Sources and Overrides can be combined. Sources will be applied in order, Overrides always at the end.
+If multiple sources define the same key, later sources will overwrite earlier ones.
+
+```go
+err := appgofig.ReadConfig(
+	&cfg,
+	appgofig.WithSources(
+		appgofig.YAMLSource(),
+		appgofig.PrefixedEnvironmentSource("APP"),
+	),
+	appgofig.WithOverrides(map[string]string{
+		"Port": "7000",
+	}),
+)
+```
+
+## Inspecting configuration values
+
+Using `VisitConfigEntries`, all configuration values can be inspected:
+
+```go
+err := appgofig.VisitConfigEntries(
+	&cfg,
+	func(entry appgofig.AppConfigEntry) {
+		log.Printf("%s=%s", entry.Key, entry.Value)
+	},
+)
+```
+
+> [!note]
+> Masked values will be reported as `[Masked (len: N)]`
+
+AppConfigEntry includes:
+
+```go
+type AppConfigEntry struct {
+	Key            string
+	Value          string
+	ValueType      reflect.Kind
+	DefaultValue   string
+	IsRequired     bool
+	IsMasked       bool
+	EnvironmentKey string
+}
+```
+
+## Generating Documentation
+
+```go
+descriptions := map[string]string{
+	"AppName": "The application name.",
+	"Port":    "The listening port.",
+}
+
+if err := appgofig.CreateConfigDocumentation(
+	&cfg,
+	descriptions,
+	"docs",
+); err != nil {
 	log.Fatal(err)
 }
 ```
 
-> [!caution]
-> Make sure to use a pointer to your struct, not the struct itself.
+This will generate:
 
-Now, using your config should be as easy as accessing the struct itself:
+- `docs/DefaultDocumentation.md`
+- `docs/config.example.yaml`
+
+The Markdown document contains a configuration overview, Docker Compose example, and Docker run example.
+
+They can also be created individually:
 
 ```go
-log.Println(cfg.MyOwnSetting)
+err := appgofig.CreateConfigMarkdownDocument(
+	&cfg,
+	descriptions,
+	"docs/config.md",
+)
+
+err := appgofig.CreateConfigExampleYAML(
+	&cfg,
+	descriptions,
+	"docs/config.example.yaml",
+)
 ```
 
-## Logging your config
+## Custom Sources
 
-Starting with v0.3.0, the `LogConfig()` method has been replaced with `VisitConfigEntries()` to decouple from logging solutions.
-
-This snippet will show you how to log all configuration entries using `VisitConfigEntries()`:
+Custom sources implement the `AppGofigSource` interface:
 
 ```go
-if err := appgofig.VisitConfigEntries(cfg, func(entry appgofig.ConfigEntry) {
-	fmt.Fprintf(os.Stdout, "%s=%s\n", entry.Key, entry.Value)
-}); err != nil {
-	log.Fatal(err)
+type AppGofigSource interface {
+	Load(map[string]*appgofig.AppConfigEntry) (map[string]string, error)
 }
 ```
 
-## The `Config` struct
+The returned map should use configuration struct field names as keys. Unknown keys are ignored.
+The input map parameter is for informational purposes only and should never be altered (e.g. reading the EnvironmentKey or its ValueType)
 
-The `Config` struct determines your whole configuration. You can name it whatever you want.
-The following tags are usable:
+## Testing
 
-| Tag Name            | Content                                                                                                                  |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `env`               | Key used for Environment Variables. If omitted or empty, it defaults to the field name                                   |
-| `default`           | String representation of a default value. For `int`, `float64`, and `bool`, a parseable value should be provided         |
-| `req` or `required` | If set to "true", this config setting cannot be empty. Only applies to string values and is ignored on non-string values |
-| `mask` or `masked`  | If set to "true", this will mask the value of a field when using `VisitConfigEntries()`                                  |
+Run tests:
 
-Example entry:
-
-```go
-type Config struct {
-	MyOwnSetting string `env:"ENV_MY_OWN_SETTING" default:"myDefaultValue" req:"true" mask:"true"`
-}
+```bash
+go test ./... -cover
 ```
 
-> [!important]
-> Due to my own needs, only four types are allowed: `string`, `int`, `float64` and `bool`.
+Create coverage HTML report:
 
-## Available Options
-
-The `ReadConfig()` method has a second parameter for `With...()` option functions.
-The following are available:
-
-- `WithReadMode(readMode ConfigReadMode)` to set a read mode
-- `WithYamlFile(filePath string)` to set a specific YAML file
-- `WithMapInput(values map[string]string)` to provide a map of key value pairs. Only applied in combination with `ReadModeMapInputOnly`, must not be present otherwise.
-
-Check the `example` folder on how to use them.
-
-### ReadModes
-
-There are five read modes available:
-
-| ReadMode                        | Description                                                                                           |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `appgofig.ReadModeEnvOnly`      | Only uses Environment to read values                                                                  |
-| `appgofig.ReadModeYamlOnly`     | Only uses a YAML file                                                                                 |
-| `appgofig.ReadModeEnvThenYaml`  | First read env, then apply YAML (overwriting env values if present). This is the default read mode.   |
-| `appgofig.ReadModeYamlThenEnv`  | First read YAML, then apply env (overwriting YAML values if present)                                  |
-| `appgofig.ReadModeMapInputOnly` | Only apply values supplied via `WithMapInput()` on top of defaults, no yaml or env (useful for tests) |
-
-### Using yaml files
-
-When no YAML file is specified using `WithYamlFile()`, but a YAML ReadMode is used, this list
-of paths is used to look for YAML files. First hit is used:
-
-```go
-defaultYamlPaths := []string{"config.yml", "config.yaml", "config/config.yml", "config/config.yaml"}
-```
-
-> [!important]
-> To keep it simple, only flat key:value pair YAMLs are allowed. No nesting should be there.
-
-YAML keys must match the Go struct field names exactly, for example `MyOwnSetting`.
-The `env` tag only affects environment lookup and does not rename YAML keys.
-
-Environment-based reads also attempt to load values from a local `.env` file first.
-This applies to `ReadModeEnvOnly`, `ReadModeEnvThenYaml`, and `ReadModeYamlThenEnv`.
-
-# Documentation
-
-Two methods are provided to automatically create documentation about your configuration.
-Check the `example` folder for how they could look like.
-
-### Markdown
-
-Using `WriteToMarkdownFile()` you can generate a markdown file containing a simple table.
-
-```go
-if err := appgofig.WriteToMarkdownFile(cfg, configDescriptions, "example/MarkdownExample.md"); err != nil {
-	log.Fatal(err)
-}
-```
-
-### Example config YAML
-
-Similarly, using `WriteToYamlExampleFile()` will generate an example YAML file with comments explaining each entry.
-
-```go
-if err := appgofig.WriteToYamlExampleFile(cfg, configDescriptions, "example/ConfigYamlExample.yaml"); err != nil {
-	log.Fatal(err)
-}
-```
-
-# Tests
-
-A basic set of tests is included. To run:
-
-```go
-go test -cover ./... -coverprofile=coverage.out
+```bash
+go test ./... -coverprofile=coverage.out
 go tool cover -html=coverage.out -o coverage.html
 ```
-
-You can admire the coverage in a browser then.

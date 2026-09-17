@@ -1,12 +1,14 @@
-package main
+package example_test
 
 import (
+	"log"
+
 	"github.com/smartfactory-kl/appgofig"
 )
 
 type ExampleConfig struct {
 	MyOwnSetting    int    `default:"42" env:"MY_OWN_SETTING"`
-	MyStringSetting string `default:"defaultStringSetting" env:"MY_STRING_SETTING" req:"true"`
+	MyStringSetting string `default:"StringInput" env:"MY_STRING_SETTING" req:"true"`
 }
 
 var exampleCfgDescriptions map[string]string = map[string]string{
@@ -16,10 +18,16 @@ var exampleCfgDescriptions map[string]string = map[string]string{
 
 func ExampleReadConfig() {
 	cfg := ExampleConfig{}
-	appgofig.ReadConfig(&cfg)
+	err := appgofig.ReadConfig(&cfg, appgofig.WithSources(appgofig.EnvironmentSource()))
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 func ExampleCreateConfigDocumentation() {
 	cfg := ExampleConfig{}
-	appgofig.CreateConfigDocumentation(&cfg, exampleCfgDescriptions, "docs")
+	err := appgofig.CreateConfigDocumentation(&cfg, exampleCfgDescriptions, "docs")
+	if err != nil {
+		log.Fatal(err)
+	}
 }

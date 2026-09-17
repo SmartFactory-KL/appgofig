@@ -1,6 +1,7 @@
 package appgofig
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,10 +11,8 @@ import (
 )
 
 // typing test
-var sourceList []AppGofigSource = []AppGofigSource{
-	&yamlSrc{},
-	&envSrc{},
-}
+var _ AppGofigSource = (*yamlSrc)(nil)
+var _ AppGofigSource = (*envSrc)(nil)
 
 // common interface for all source loaders
 type AppGofigSource interface {
@@ -28,16 +27,16 @@ type yamlSrc struct {
 	filePath string
 }
 
-// Read from a YAML source. If filePath is set, the first string path will be used, otherwise one of the defaults.
-func YAMLSource(filePath ...string) *yamlSrc {
-	srcPath := ""
-
-	if len(filePath) > 0 {
-		srcPath = strings.TrimSpace(filePath[0])
-	}
-
+func SpecificYAMLSource(filePath string) AppGofigSource {
 	return &yamlSrc{
-		filePath: srcPath,
+		filePath: filePath,
+	}
+}
+
+// Read from default yaml sources
+func YAMLSource() AppGofigSource {
+	return &yamlSrc{
+		filePath: "",
 	}
 }
 
@@ -48,25 +47,33 @@ func (src *yamlSrc) Load(cfgInfo map[string]*AppConfigEntry) (map[string]string,
 	if len(src.filePath) > 0 {
 		pathsToCheck = append(pathsToCheck, src.filePath)
 	} else {
-		pathsToCheck = []string{
+		pathsToCheck = append(pathsToCheck,
 			"config.yml",
 			"config.yaml",
 			"config/config.yml",
 			"config/config.yaml",
-		}
+		)
 	}
 
 	// read first existing file
 	var yamlPath string
 	for _, pathToCheck := range pathsToCheck {
-		if _, err := os.Stat(pathToCheck); err == nil {
-			yamlPath = pathToCheck
-			break
+		info, err := os.Stat(pathToCheck)
+		if err == nil {
+			if !info.IsDir() {
+				yamlPath = pathToCheck
+				break
+			}
+			continue
+		}
+
+		if !errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("checking path %q failed: %w", pathToCheck, err)
 		}
 	}
 
 	if len(strings.TrimSpace(yamlPath)) == 0 {
-		return nil, fmt.Errorf("YAML source cannot be read: file path cannot be empty")
+		return nil, fmt.Errorf("YAML source cannot be read: file path cannot be empty or file not found for path: %s", yamlPath)
 	}
 
 	yamlContent, err := os.ReadFile(filepath.Clean(yamlPath))
@@ -97,10 +104,16 @@ type envSrc struct {
 	envPrefix string
 }
 
-// Use the environment as source
-func EnvironmentSource(envPrefix string) *envSrc {
+func PrefixedEnvironmentSource(prefix string) AppGofigSource {
 	return &envSrc{
-		envPrefix: envPrefix,
+		envPrefix: prefix,
+	}
+}
+
+// Use the environment as source
+func EnvironmentSource() AppGofigSource {
+	return &envSrc{
+		envPrefix: "",
 	}
 }
 

@@ -40,9 +40,14 @@ type AppGofigOptions struct {
 type AppGofigOption func(*AppGofigOptions)
 
 // WithSources will apply sources in the given order, overwriting previous values and starting from default
-func WithSources(sources []AppGofigSource) AppGofigOption {
+func WithSources(sources ...AppGofigSource) AppGofigOption {
 	return func(options *AppGofigOptions) {
-		options.Sources = sources
+		for _, source := range sources {
+			if source == nil {
+				continue
+			}
+			options.Sources = append(options.Sources, source)
+		}
 	}
 }
 
