@@ -7,28 +7,28 @@ import (
 	"strings"
 )
 
-// isValidConfigStruct checks wether cfg points to a non-nil struct.
-func isValidConfigStruct(cfg any) error {
+// checkConfigStruct checks wether cfg points to a non-nil struct.
+func checkConfigStruct(cfg any) error {
 	if cfg == nil {
-		return fmt.Errorf("Config cannot be nil")
+		return fmt.Errorf("config cannot be nil")
 	}
 
 	v := reflect.ValueOf(cfg)
 
 	if v.Kind() != reflect.Pointer {
-		return fmt.Errorf("Config must be a pointer, instead got %s", v.Kind())
+		return fmt.Errorf("config must be a pointer, instead got %s", v.Kind())
 	}
 
 	if v.IsNil() {
-		return fmt.Errorf("Config must not be a nil pointer")
+		return fmt.Errorf("config must not be a nil pointer")
 	}
 
 	if v.Elem().Kind() != reflect.Struct {
-		return fmt.Errorf("Config must point to a struct, instead got %s", v.Elem().Type())
+		return fmt.Errorf("config must point to a struct, instead got %s", v.Elem().Type())
 	}
 
 	if err := onlyContainsSupportedTypes(cfg); err != nil {
-		return fmt.Errorf("Config contains invalid types: %w", err)
+		return fmt.Errorf("config contains invalid types: %w", err)
 	}
 
 	return nil
@@ -54,7 +54,7 @@ func onlyContainsSupportedTypes(cfg any) error {
 }
 
 // readConfigDefaults reads the config struct and creates a map of AppConfigEntry based on its
-// fields and tags. It expects cfg to be a non-nil pointer to a non-nil struct containing.
+// fields and tags. It expects cfg to be a non-nil pointer to a non-nil struct.
 func readConfigDefaults(cfg any) map[string]*AppConfigEntry {
 	t := reflect.TypeOf(cfg).Elem()
 
@@ -63,12 +63,14 @@ func readConfigDefaults(cfg any) map[string]*AppConfigEntry {
 	for k := 0; k < t.NumField(); k++ {
 		field := t.Field(k)
 
-		defaultValue := field.Tag.Get("default")
-		envKey := field.Tag.Get("env")
+		defaultValue := strings.TrimSpace(field.Tag.Get("default"))
+		envKey := strings.TrimSpace(field.Tag.Get("env"))
 
 		entry := &AppConfigEntry{
 			Key:   field.Name,
 			Value: defaultValue,
+
+			ValueType: field.Type.Kind(),
 
 			DefaultValue: defaultValue,
 
@@ -150,4 +152,54 @@ func isMaskedField(field reflect.StructField) bool {
 // isRequiredField returns true if required, req or require is set
 func isRequiredField(field reflect.StructField) bool {
 	return hasOneBoolTagSet(field, []string{"required", "req", "require"})
+}
+
+// applyEntryToValue tries to set fieldVals value by converting cfgEntry.value to the desired type.
+func applyEntryToValue(field reflect.StructField, fieldVal reflect.Value, cfgEntry *AppConfigEntry) error {
+	switch field.Type.Kind() {
+	case reflect.String:
+		fieldVal.SetString(cfgEntry.Value)
+	case reflect.Bool:
+		boolVal, err := strconv.ParseBool(cfgEntry.Value)
+		if err != nil {
+			return fmt.Errorf("cannot use %s as bool: %w", cfgEntry.Value, err)
+		}
+
+		fieldVal.SetBool(boolVal)
+	case reflect.Int:
+		// base 0 means: Infer base from string input
+		intVal, err := strconv.ParseInt(cfgEntry.Value, 0, 64)
+		if err != nil {
+			return fmt.Errorf("cannot use %s as int: %w", cfgEntry.Value, err)
+		}
+
+		fieldVal.SetInt(intVal)
+	case reflect.Float64:
+		floatVal, err := strconv.ParseFloat(cfgEntry.Value, 64)
+		if err != nil {
+			return fmt.Errorf("cannot use %s as float64: %w", cfgEntry.Value, err)
+		}
+
+		fieldVal.SetFloat(floatVal)
+	default:
+		return fmt.Errorf("unsupported type %s", field.Type.Kind())
+	}
+
+	return nil
+}
+
+// getConfigEntryKeys will return a list of strings that represent the order
+// of keys within the cfg struct. Use this when iterating over the config sinces maps
+// might not be consistent in their ordering
+// Note: It expects cfg to be a non-nil pointer to a non-nil struct.
+func getConfigEntryKeys(cfg any) []string {
+	t := reflect.TypeOf(cfg).Elem()
+
+	keys := make([]string, 0, t.NumField())
+
+	for k := 0; k < t.NumField(); k++ {
+		keys = append(keys, t.Field(k).Name)
+	}
+
+	return keys
 }

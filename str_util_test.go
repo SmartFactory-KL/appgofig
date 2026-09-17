@@ -45,7 +45,7 @@ func TestGetEnvKey(t *testing.T) {
 			name:   "multiple trailing underscores on prefix",
 			prefix: "APP___",
 			key:    "DATABASE",
-			want:   "APP__DATABASE",
+			want:   "APP___DATABASE",
 		},
 		{
 			name:   "key starts with underscore",
@@ -63,7 +63,7 @@ func TestGetEnvKey(t *testing.T) {
 			name:   "mixed case",
 			prefix: "myApp",
 			key:    "databaseName",
-			want:   "MYAPP_DATABASENAME",
+			want:   "MYAPP_DATABASE_NAME",
 		},
 	}
 

@@ -86,7 +86,7 @@ func (src *yamlSrc) Load(cfgInfo map[string]*AppConfigEntry) (map[string]string,
 			continue
 		}
 
-		cfgMap[resultKey] = yamlVal
+		cfgMap[resultKey] = strings.TrimSpace(yamlVal)
 	}
 
 	return cfgMap, nil
@@ -122,7 +122,7 @@ func (src *envSrc) Load(cfgInfo map[string]*AppConfigEntry) (map[string]string, 
 			continue
 		}
 
-		output[envKey] = strings.TrimSpace(envVal)
+		output[infoEntry.Key] = strings.TrimSpace(envVal)
 	}
 
 	return output, nil

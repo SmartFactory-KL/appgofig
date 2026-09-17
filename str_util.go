@@ -19,6 +19,7 @@ func getEnvKey(prefix string, key string) string {
 	return sb.String()
 }
 
+// toUpperSnakeCase will convert camelCase or PascalCase to UPPER_SNAKE_CASE
 func toUpperSnakeCase(input string) string {
 	var sb strings.Builder
 
@@ -38,4 +39,18 @@ func toUpperSnakeCase(input string) string {
 	}
 
 	return sb.String()
+}
+
+// escapeMarkdown escapes characters that can interfere with Markdown tables.
+func escapeMarkdown(value string) string {
+	value = strings.ReplaceAll(value, `\`, `\\`)
+	value = strings.ReplaceAll(value, "|", `\|`)
+	value = strings.ReplaceAll(value, "\n", " ")
+
+	return value
+}
+
+// shellQuote quotes a string for use in a shell command.
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }

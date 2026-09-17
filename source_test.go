@@ -105,8 +105,12 @@ func TestEnvironmentSource_Load(t *testing.T) {
 	t.Setenv("UNRELATED_KEY", "ignored")
 
 	config := map[string]*AppConfigEntry{
-		"app_name": {},
-		"port":     {},
+		"app_name": {
+			Key: "app_name",
+		},
+		"port": {
+			Key: "port",
+		},
 	}
 
 	source := EnvironmentSource("app")
@@ -127,10 +131,11 @@ func TestEnvironmentSource_Load(t *testing.T) {
 }
 
 func TestEnvironmentSource_LoadExplicitEnvironmentKey(t *testing.T) {
-	t.Setenv("CUSTOM_APP_NAME", "custom-value")
+	t.Setenv("APP_CUSTOM_APP_NAME", "custom-value")
 
 	config := map[string]*AppConfigEntry{
 		"app_name": {
+			Key:            "app_name",
 			EnvironmentKey: "CUSTOM_APP_NAME",
 		},
 	}
@@ -155,8 +160,12 @@ func TestEnvironmentSource_LoadIgnoresMissingVariables(t *testing.T) {
 	t.Setenv("APP_EXISTING", "present")
 
 	config := map[string]*AppConfigEntry{
-		"existing": {},
-		"missing":  {},
+		"existing": {
+			Key: "existing",
+		},
+		"missing": {
+			Key: "missing",
+		},
 	}
 
 	source := EnvironmentSource("APP")

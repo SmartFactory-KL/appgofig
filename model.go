@@ -1,5 +1,7 @@
 package appgofig
 
+import "reflect"
+
 // AppConfigEntry represents the entry within a configuration struct including the possible tag values
 type AppConfigEntry struct {
 	// The key, being the actual field name of the struct entry
@@ -7,6 +9,9 @@ type AppConfigEntry struct {
 
 	// current string value, as read from the sources
 	Value string
+
+	// the expected type of value
+	ValueType reflect.Kind
 
 	// the default value as taken from the config struct, defaults to empty string
 	DefaultValue string
