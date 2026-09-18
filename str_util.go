@@ -1,9 +1,36 @@
 package appgofig
 
 import (
+	"fmt"
 	"strings"
 	"unicode"
 )
+
+// getEntryMaskedValue returns default value or `[Masked (len: %d)]` if IsMasked is set
+func getEntryMaskedDefaultValue(entry *AppConfigEntry) string {
+	defaultValue := entry.DefaultValue
+	if entry.IsMasked {
+		defaultValue = maskString(defaultValue)
+	}
+
+	return defaultValue
+}
+
+func maskString(input string) string {
+	return fmt.Sprintf("[Masked (len: %d)]", len(input))
+}
+
+// getEntryEnvKey returns the environment key associated with an AppConfigEntry and the prefix
+func getEntryEnvKey(prefix string, entry *AppConfigEntry) string {
+	var envKey string
+	if len(entry.EnvironmentKey) > 0 {
+		envKey = getEnvKey(prefix, entry.EnvironmentKey)
+	} else {
+		envKey = getEnvKey(prefix, entry.Key)
+	}
+
+	return envKey
+}
 
 // getEnvKey returns UPPER_CASE_SNAKE version while joining prefix and key with underscore
 func getEnvKey(prefix string, key string) string {

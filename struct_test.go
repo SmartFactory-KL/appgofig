@@ -187,8 +187,7 @@ func TestReadStringFromValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := readStringFromValue(reflect.ValueOf(tt.val))
-			if got != tt.want {
+			if got := readStringFromValue(reflect.ValueOf(tt.val)); got != tt.want {
 				t.Fatalf("readStringFromValue() = %q, want %q", got, tt.want)
 			}
 		})
@@ -196,75 +195,114 @@ func TestReadStringFromValue(t *testing.T) {
 }
 
 func TestApplyEntryToValue(t *testing.T) {
-	tests := []struct {
-		name string
-		val  string
-		want any
-	}{
-		{"string", "hello", "hello"},
-		{"bool", "true", true},
-		{"int", "42", int(42)},
-		{"float", "3.14", 3.14},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := structTestConfig{}
-			field, _ := reflect.TypeOf(cfg).FieldByName(tt.name)
-			_ = field
-		})
-	}
-
-	t.Run("all supported types", func(t *testing.T) {
+	t.Run("supported values", func(t *testing.T) {
 		cfg := structTestConfig{}
-		v := reflect.ValueOf(&cfg).Elem()
+		value := reflect.ValueOf(&cfg).Elem()
 
-		values := []struct {
+		tests := []struct {
 			field string
-			value string
+			input string
 			want  any
 		}{
 			{"StringValue", "changed", "changed"},
 			{"IntValue", "7", int(7)},
-			{"FloatValue", "2.5", 2.5},
+			{"FloatValue", "2.5", float64(2.5)},
 			{"BoolValue", "false", false},
+			{"IntValue", "0x2a", int(42)},
 		}
 
-		for _, tt := range values {
-			field, _ := v.Type().FieldByName(tt.field)
-			fieldVal := v.FieldByName(tt.field)
-			entry := &AppConfigEntry{Value: tt.value}
+		for _, tt := range tests {
+			t.Run(tt.field+"="+tt.input, func(t *testing.T) {
+				field, _ := value.Type().FieldByName(tt.field)
+				fieldValue := value.FieldByName(tt.field)
 
-			if err := applyEntryToValue(field, fieldVal, entry); err != nil {
-				t.Fatalf("applyEntryToValue(%s) unexpected error: %v", tt.field, err)
+				if err := applyEntryToValue(field, fieldValue, &AppConfigEntry{Value: tt.input}); err != nil {
+					t.Fatalf("applyEntryToValue() unexpected error: %v", err)
+				}
+
+				if got := fieldValue.Interface(); got != tt.want {
+					t.Errorf("%s = %v, want %v", tt.field, got, tt.want)
+				}
+			})
+		}
+	})
+
+	t.Run("empty numeric values become zero", func(t *testing.T) {
+		cfg := structTestConfig{}
+		value := reflect.ValueOf(&cfg).Elem()
+
+		for _, fieldName := range []string{"IntValue", "FloatValue", "BoolValue"} {
+			field, _ := value.Type().FieldByName(fieldName)
+			fieldValue := value.FieldByName(fieldName)
+
+			if err := applyEntryToValue(field, fieldValue, &AppConfigEntry{}); err != nil {
+				t.Fatalf("applyEntryToValue(%s) unexpected error: %v", fieldName, err)
 			}
 
-			if got := fieldVal.Interface(); got != tt.want {
-				t.Errorf("%s = %v, want %v", tt.field, got, tt.want)
+			if !fieldValue.IsZero() {
+				t.Errorf("%s = %v, want zero value", fieldName, fieldValue.Interface())
 			}
 		}
 	})
 
 	t.Run("invalid values", func(t *testing.T) {
 		cfg := structTestConfig{}
-		v := reflect.ValueOf(&cfg).Elem()
+		value := reflect.ValueOf(&cfg).Elem()
 
 		tests := []struct {
 			field string
-			value string
+			input string
 		}{
 			{"BoolValue", "not-bool"},
 			{"IntValue", "not-int"},
+			{"IntValue", "999999999999999999999999999"},
 			{"FloatValue", "not-float"},
 		}
 
 		for _, tt := range tests {
-			field, _ := v.Type().FieldByName(tt.field)
-			entry := &AppConfigEntry{Value: tt.value}
+			t.Run(tt.field+"="+tt.input, func(t *testing.T) {
+				field, _ := value.Type().FieldByName(tt.field)
 
-			if err := applyEntryToValue(field, v.FieldByName(tt.field), entry); err == nil {
-				t.Errorf("expected error for %s=%q", tt.field, tt.value)
-			}
+				if err := applyEntryToValue(
+					field,
+					value.FieldByName(tt.field),
+					&AppConfigEntry{Value: tt.input},
+				); err == nil {
+					t.Errorf("expected error for %s=%q", tt.field, tt.input)
+				}
+			})
+		}
+	})
+
+	t.Run("non-settable field", func(t *testing.T) {
+		cfg := structTestConfig{}
+		value := reflect.ValueOf(cfg)
+		field, _ := value.Type().FieldByName("StringValue")
+
+		err := applyEntryToValue(
+			field,
+			value.FieldByName("StringValue"),
+			&AppConfigEntry{Value: "changed"},
+		)
+		if err == nil || !strings.Contains(err.Error(), "cannot be set") {
+			t.Fatalf("applyEntryToValue() error = %v, want cannot-be-set error", err)
+		}
+	})
+
+	t.Run("unsupported field type", func(t *testing.T) {
+		cfg := struct {
+			Values []string
+		}{}
+		value := reflect.ValueOf(&cfg).Elem()
+		field, _ := value.Type().FieldByName("Values")
+
+		err := applyEntryToValue(
+			field,
+			value.FieldByName("Values"),
+			&AppConfigEntry{Value: "ignored"},
+		)
+		if err == nil || !strings.Contains(err.Error(), "unsupported type slice") {
+			t.Fatalf("applyEntryToValue() error = %v, want unsupported-type error", err)
 		}
 	})
 }
@@ -277,9 +315,7 @@ func TestGetConfigEntryKeys(t *testing.T) {
 	}{}
 
 	want := []string{"First", "Second", "Third"}
-	got := getConfigEntryKeys(cfg)
-
-	if !reflect.DeepEqual(got, want) {
+	if got := getConfigEntryKeys(cfg); !reflect.DeepEqual(got, want) {
 		t.Fatalf("getConfigEntryKeys() = %v, want %v", got, want)
 	}
 }

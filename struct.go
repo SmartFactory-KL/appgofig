@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// checkConfigStruct checks wether cfg points to a non-nil struct.
+// checkConfigStruct checks whether cfg points to a non-nil struct.
 func checkConfigStruct(cfg any) error {
 	if cfg == nil {
 		return fmt.Errorf("config cannot be nil")
@@ -38,8 +38,8 @@ func checkConfigStruct(cfg any) error {
 	return nil
 }
 
-// onlyContainsSupportedTypes checks if only supported data types are present within targtConfig
-// if not, if returns an error describing the first non-valid field name
+// onlyContainsSupportedTypes checks if only supported data types are present within targetConfig
+// if not, it returns an error describing the first non-valid field name
 // It expects cfg to be a non-nil pointer to a non-nil struct.
 func onlyContainsSupportedTypes(cfg any) error {
 	t := reflect.TypeOf(cfg).Elem()
@@ -57,7 +57,7 @@ func onlyContainsSupportedTypes(cfg any) error {
 	return nil
 }
 
-// onlyContainsExportedFields checks wether unexported fields are present in the struct. They are not allowed.
+// onlyContainsExportedFields checks whether unexported fields are present in the struct. They are not allowed.
 func onlyContainsExportedFields(cfg any) error {
 	t := reflect.TypeOf(cfg).Elem()
 
@@ -198,19 +198,37 @@ func applyEntryToValue(field reflect.StructField, fieldVal reflect.Value, cfgEnt
 
 		fieldVal.SetBool(boolVal)
 	case reflect.Int:
-		// base 0 means: Infer base from string input
-		intVal, err := strconv.ParseInt(cfgEntry.Value, 0, 64)
-		if err != nil {
-			return fmt.Errorf("cannot use %s as int: %w", cfgEntry.Value, err)
+		var intVal int64
+		var err error
+
+		if len(cfgEntry.Value) == 0 {
+			// another special case. since an empty int might occur on "optional" things,
+			// the empty value is okay here and will be set to 0
+			intVal = 0
+		} else {
+			// base 0 means: Infer base from string input
+			intVal, err = strconv.ParseInt(cfgEntry.Value, 0, 64)
+			if err != nil {
+				return fmt.Errorf("cannot use %s as int: %w", cfgEntry.Value, err)
+			}
 		}
 
 		fieldVal.SetInt(intVal)
 	case reflect.Float64:
-		floatVal, err := strconv.ParseFloat(cfgEntry.Value, 64)
-		if err != nil {
-			return fmt.Errorf("cannot use %s as float64: %w", cfgEntry.Value, err)
-		}
+		var floatVal float64
+		var err error
 
+		if len(cfgEntry.Value) == 0 {
+			// another special case. since an empty float might occur on "optional" things,
+			// the empty value is okay here and will be set to 0.0
+			floatVal = 0.0
+		} else {
+			floatVal, err = strconv.ParseFloat(cfgEntry.Value, 64)
+			if err != nil {
+				return fmt.Errorf("cannot use %s as float64: %w", cfgEntry.Value, err)
+			}
+
+		}
 		fieldVal.SetFloat(floatVal)
 	default:
 		return fmt.Errorf("unsupported type %s", field.Type.Kind())
@@ -220,7 +238,7 @@ func applyEntryToValue(field reflect.StructField, fieldVal reflect.Value, cfgEnt
 }
 
 // getConfigEntryKeys will return a list of strings that represent the order
-// of keys within the cfg struct. Use this when iterating over the config sinces maps
+// of keys within the cfg struct. Use this when iterating over the config since maps
 // might not be consistent in their ordering
 // Note: It expects cfg to be a non-nil pointer to a non-nil struct.
 func getConfigEntryKeys(cfg any) []string {

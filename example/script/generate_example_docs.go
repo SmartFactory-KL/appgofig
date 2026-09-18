@@ -1,7 +1,8 @@
-package example_test
+//go:build ignore
+
+package main
 
 import (
-	"fmt"
 	"log"
 
 	"github.com/smartfactory-kl/appgofig"
@@ -26,35 +27,15 @@ var exampleCfgDescriptions map[string]string = map[string]string{
 	"RequiredValue": "An example for a required value",
 }
 
-func ExampleReadConfig() {
-	// This will simply apply the default values from the struct
-	// as no sources are provided
-	cfg, err := appgofig.ReadConfig(&ExampleConfig{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(cfg)
-
-	// One standard way of reading configuration might be
-	// reading YAML first with ENV overwriting it
-	cfg, err = appgofig.ReadConfig(
-		&ExampleConfig{},
-		appgofig.WithSources(
-			appgofig.YAMLSource(),
-			appgofig.EnvironmentSource(),
-		),
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(cfg)
-}
-
-// This is how config documentation would be created
-func ExampleCreateConfigDocumentation() {
+func main() {
 	cfg := ExampleConfig{}
-	err := appgofig.CreateConfigDocumentation(&cfg, exampleCfgDescriptions, "MY_APP_PREFIX", "docs")
-	if err != nil {
+
+	if err := appgofig.CreateConfigDocumentation(
+		&cfg,
+		exampleCfgDescriptions,
+		"MY_APP_PREFIX",
+		"example/docs",
+	); err != nil {
 		log.Fatal(err)
 	}
 }

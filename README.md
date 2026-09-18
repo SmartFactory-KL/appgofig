@@ -1,4 +1,4 @@
-[![codecov](https://codecov.io/github/SmartFactory-KL/appgofig/branch/main/graph/badge.svg?token=JORBSOKMZX)](https://codecov.io/github/SmartFactory-KL/appgofig)
+[![codecov](https://codecov.io/github/smartfactory-kl/appgofig/branch/main/graph/badge.svg?token=JORBSOKMZX)](https://codecov.io/github/smartfactory-kl/appgofig)
 
 # AppGofig (AppConfig for Go)
 
@@ -22,7 +22,7 @@ package main
 import (
 	"log"
 
-	"github.com/SmartFactory-KL/appgofig"
+	"github.com/smartfactory-kl/appgofig"
 )
 
 // Define the Config struct itself
@@ -34,16 +34,31 @@ type Config struct {
 }
 
 func main() {
-	// instantiate
-	cfg := Config{}
+	// Read config using the struct instance
+	// By default (with no sources applied) it will simply use the specified default values
+	cfg, err := appgofig.ReadConfig(&Config{})
 
-	// Read config from environment which changes the values of cfg
-	if err := appgofig.ReadConfig(&cfg, appgofig.WithSources(appgofig.EnvironmentSource())); err != nil {
+	if err != nil {
 		log.Fatal(err)
 	}
 
 	// Config options are autocompleted
 	log.Println(cfg.AppName, cfg.Port, cfg.Debug, cfg.Ratio)
+
+	// Usually, at least one source should be used, for example the environment
+	cfgFromEnv, err := appgofig.ReadConfig(
+		&Config{},
+		appgofig.WithSources(
+			appgofig.EnvironmentSource(),
+		),
+	)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Config options are still autocompleted
+	log.Println(cfgFromEnv.AppName, cfgFromEnv.Port, cfgFromEnv.Debug, cfgFromEnv.Ratio)
 }
 ```
 
@@ -86,15 +101,18 @@ APIKey string `required:"true"`
 
 ### `masked`, `mask`
 
-Setting this to `true` masks the value of the field when using `VisitConfigEntries`.
+Setting this to `true` masks the value and the default value of the field when using `VisitConfigEntries` and in any generated documentation.
 
 ```go
 APIKey string `masked:"true"`
 ```
 
+> [!note]
+> The value will be replaced with `[Masked (len: x)]` with `x` being the byte length of the (stringified) value or default value
+
 ## Configuration Sources
 
-Specifying no sources will simply return a config with all default values.
+Specifying no sources will result in a Config with only default values.
 To specify a source, use the `WithSources()` option.
 
 ### Environment as source
@@ -151,7 +169,7 @@ Debug: true
 
 ## Overrides
 
-Another option is `WithOverrides`, containing a `map[string]string` that will always applied last.
+Another option is `WithOverrides`, containing a `map[string]string` that will always be applied last.
 
 ```go
 appgofig.WithOverrides(map[string]string{
@@ -165,8 +183,8 @@ Sources and Overrides can be combined. Sources will be applied in order, Overrid
 If multiple sources define the same key, later sources will overwrite earlier ones.
 
 ```go
-err := appgofig.ReadConfig(
-	&cfg,
+cfg, err := appgofig.ReadConfig(
+	&Config{},
 	appgofig.WithSources(
 		appgofig.YAMLSource(),
 		appgofig.PrefixedEnvironmentSource("APP"),
@@ -218,6 +236,7 @@ descriptions := map[string]string{
 if err := appgofig.CreateConfigDocumentation(
 	&cfg,
 	descriptions,
+	"ENV_PREFIX",
 	"docs",
 ); err != nil {
 	log.Fatal(err)
@@ -237,15 +256,20 @@ They can also be created individually:
 err := appgofig.CreateConfigMarkdownDocument(
 	&cfg,
 	descriptions,
+	"ENV_PREFIX",
 	"docs/config.md",
 )
 
 err := appgofig.CreateConfigExampleYAML(
 	&cfg,
 	descriptions,
+	"ENV_PREFIX",
 	"docs/config.example.yaml",
 )
 ```
+
+> [!note]
+> `ENV_PREFIX` should only be used if one of the sources is the prefixed environment. Otherwise simply use `""`
 
 ## Custom Sources
 

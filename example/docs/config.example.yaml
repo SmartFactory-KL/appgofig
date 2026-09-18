@@ -1,12 +1,34 @@
 # Config Example YAML
 # Auto generated file. Please provide your own values here
 
-# MyOwnSetting [int]
-# This is just a simple example description so this map is not empty
-MyOwnSetting: "42"
+# StringValue [string]
+# Environment: MY_APP_PREFIX_STRING_VALUE
+# An example for a string value
+StringValue: "DefaultStringValue"
 
-# MyStringSetting [string - required]
-# This is just a string setting that is empty but required.
-MyStringSetting: "defaultStringSetting"
+# IntValue [int]
+# Environment: MY_APP_PREFIX_INT_VALUE
+# An example for an int value
+IntValue: 100
+
+# FloatValue [float64]
+# Environment: MY_APP_PREFIX_FLOAT_VALUE
+# An example for a float value
+FloatValue: 3.141
+
+# BoolValue [bool]
+# Environment: MY_APP_PREFIX_BOOL_VALUE
+# An example for a boolean value
+BoolValue: true
+
+# MaskedValue [float64]
+# Environment: MY_APP_PREFIX_MASKED_VALUE
+# An example for a masked value
+MaskedValue: "[Masked (len: 5)]"
+
+# RequiredValue [string - required]
+# Environment: MY_APP_PREFIX_REQUIRED_VALUE
+# An example for a required value
+RequiredValue: "MyRequiredValue"
 
 # End of auto generated file

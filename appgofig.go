@@ -9,10 +9,9 @@ import (
 	"strings"
 )
 
-// ReadConfig takes any Config struct and a list of options. Based on this it first applies the default values
-// and then all sources in order, where later values overwrite earlier ones. At the end, values will be directly applied
-// to the Config itself, so only an error is returned.
-func ReadConfig[T any](cfg *T, optionList ...AppGofigOption) error {
+// ReadConfig takes any Config struct and a list of options. Based on this it first reads the default values
+// and then all sources in order, where later values overwrite earlier ones. It returns the Config with applied values.
+func ReadConfig[T any](cfg *T, optionList ...AppGofigOption) (*T, error) {
 	// apply the options
 
 	gofigOptions := &AppGofigOptions{
@@ -25,9 +24,9 @@ func ReadConfig[T any](cfg *T, optionList ...AppGofigOption) error {
 		}
 	}
 
-	// check validitiy of cfg input
+	// check validity of cfg input
 	if err := checkConfigStruct(cfg); err != nil {
-		return fmt.Errorf("failed to read config: %w", err)
+		return nil, fmt.Errorf("failed to read config: %w", err)
 	}
 
 	// read defaults first
@@ -40,7 +39,7 @@ func ReadConfig[T any](cfg *T, optionList ...AppGofigOption) error {
 		for _, src := range gofigOptions.Sources {
 			srcMap, err := src.Load(entryMap)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 			sourceMaps = append(sourceMaps, srcMap)
@@ -62,7 +61,7 @@ func ReadConfig[T any](cfg *T, optionList ...AppGofigOption) error {
 		for key, val := range gofigOptions.Overrides {
 			targetEntry, ok := entryMap[key]
 			if !ok {
-				return fmt.Errorf("Override contains key %s which does not exist on config", key)
+				return nil, fmt.Errorf("Override contains key %s which does not exist on config", key)
 			}
 
 			targetEntry.Value = val
@@ -71,11 +70,15 @@ func ReadConfig[T any](cfg *T, optionList ...AppGofigOption) error {
 
 	// check if all required keys are non-empty
 	if err := checkRequiredFields(entryMap); err != nil {
-		return fmt.Errorf("missing required fields: %w", err)
+		return nil, fmt.Errorf("missing required fields: %w", err)
 	}
 
-	// apply values to actual config struct and return it
-	v := reflect.ValueOf(cfg).Elem()
+	// apply values to a copy of config struct and return it
+	cfgType := reflect.TypeOf(cfg).Elem()
+
+	resultCfgValue := reflect.New(cfgType)
+
+	v := resultCfgValue.Elem()
 	t := v.Type()
 
 	for k := 0; k < t.NumField(); k++ {
@@ -84,24 +87,24 @@ func ReadConfig[T any](cfg *T, optionList ...AppGofigOption) error {
 
 		curEntry, ok := entryMap[field.Name]
 		if !ok {
-			// Unsure wether this would ever happen
+			// Unsure whether this would ever happen
 			// since valueMap should have defaults for every entry
 			// of the config struct
 			continue
 		}
 
 		if err := applyEntryToValue(field, fieldVal, curEntry); err != nil {
-			return fmt.Errorf("failed to write value %s to field %s : %w", curEntry.Value, field.Name, err)
+			return nil, fmt.Errorf("failed to write value %s to field %s : %w", curEntry.Value, field.Name, err)
 		}
 	}
 
-	return nil
+	return resultCfgValue.Interface().(*T), nil
 }
 
 // VisitConfigEntries will run visit() once using AppConfigEntries with the actual value taken from cfg itself.
 // Any values marked as "IsMasked" will be converted to "[Masked (len:x)]" with x being the string length
 func VisitConfigEntries[T any](cfg *T, visit func(AppConfigEntry)) error {
-	// check validitiy of cfg input
+	// check validity of cfg input
 	if err := checkConfigStruct(cfg); err != nil {
 		return fmt.Errorf("failed to visit config values: %w", err)
 	}
@@ -122,15 +125,16 @@ func VisitConfigEntries[T any](cfg *T, visit func(AppConfigEntry)) error {
 		field := cfgValues.FieldByName(entry.Key)
 
 		value := readStringFromValue(field)
-
 		if entry.IsMasked {
-			value = fmt.Sprintf("[Masked (len: %d)]", len(value))
+			value = maskString(value)
 		}
+
+		defaultValue := getEntryMaskedDefaultValue(entry)
 
 		visit(AppConfigEntry{
 			Key:            entry.Key,
 			Value:          value,
-			DefaultValue:   entry.DefaultValue,
+			DefaultValue:   defaultValue,
 			ValueType:      entry.ValueType,
 			IsRequired:     entry.IsRequired,
 			IsMasked:       entry.IsMasked,
@@ -142,18 +146,18 @@ func VisitConfigEntries[T any](cfg *T, visit func(AppConfigEntry)) error {
 }
 
 // CreateConfigDocumentation will create all config documents using default paths and put them into the outputDir, creating it if needed
-func CreateConfigDocumentation[T any](cfg *T, cfgDescriptions map[string]string, outputDir string) error {
+func CreateConfigDocumentation[T any](cfg *T, cfgDescriptions map[string]string, envPrefix string, outputDir string) error {
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return fmt.Errorf("failed to create output directory for config documentation: %w", err)
 	}
 
 	markdownPath := filepath.Join(outputDir, "DefaultDocumentation.md")
-	if err := CreateConfigMarkdownDocument(cfg, cfgDescriptions, markdownPath); err != nil {
+	if err := CreateConfigMarkdownDocument(cfg, cfgDescriptions, envPrefix, markdownPath); err != nil {
 		return fmt.Errorf("failed to create config documentation: %w", err)
 	}
 
 	yamlPath := filepath.Join(outputDir, "config.example.yaml")
-	if err := CreateConfigExampleYAML(cfg, cfgDescriptions, yamlPath); err != nil {
+	if err := CreateConfigExampleYAML(cfg, cfgDescriptions, envPrefix, yamlPath); err != nil {
 		return fmt.Errorf("failed to create config example YAML: %w", err)
 	}
 
@@ -161,7 +165,7 @@ func CreateConfigDocumentation[T any](cfg *T, cfgDescriptions map[string]string,
 }
 
 // CreateConfigExampleYAML creates an example yaml file with all config entries, adding the metadata as comments
-func CreateConfigExampleYAML[T any](cfg *T, cfgDescriptions map[string]string, outputPath string) error {
+func CreateConfigExampleYAML[T any](cfg *T, cfgDescriptions map[string]string, envPrefix string, outputPath string) error {
 	if err := checkConfigStruct(cfg); err != nil {
 		return fmt.Errorf("failed to create documentation: %w", err)
 	}
@@ -190,17 +194,23 @@ func CreateConfigExampleYAML[T any](cfg *T, cfgDescriptions map[string]string, o
 		}
 
 		fmt.Fprintf(&sb, "# %s [%s%s]\n", cfgEntry.Key, cfgEntry.ValueType.String(), isRequiredString)
+		fmt.Fprintf(&sb, "# Environment: %s\n", getEntryEnvKey(envPrefix, cfgEntry))
 
 		if len(cfgDescription) > 0 {
 			fmt.Fprintf(&sb, "# %s\n", cfgDescription)
 		}
 
-		defaultValue := strconv.Quote(cfgEntry.DefaultValue)
+		defaultValue := getEntryMaskedDefaultValue(cfgEntry)
+
+		// IsMasked will always result in a string value since and should therefore be quoted
+		if cfgEntry.ValueType == reflect.String || cfgEntry.IsMasked {
+			defaultValue = strconv.Quote(defaultValue)
+		}
 
 		fmt.Fprintf(&sb, "%s: %s\n\n", cfgEntry.Key, defaultValue)
 	}
 
-	sb.WriteString("# End of auto generated file")
+	sb.WriteString("# End of auto generated file\n")
 
 	if err := os.WriteFile(outputPath, []byte(sb.String()), 0644); err != nil {
 		return fmt.Errorf("failed to create output file for yaml example: %w", err)
@@ -213,7 +223,7 @@ func CreateConfigExampleYAML[T any](cfg *T, cfgDescriptions map[string]string, o
 // - A table with an overview of all config entries, including their environment key
 // - An example environment block for a Docker Compose file
 // - An example command for docker run containing all environment entries
-func CreateConfigMarkdownDocument[T any](cfg *T, cfgDescriptions map[string]string, outputPath string) error {
+func CreateConfigMarkdownDocument[T any](cfg *T, cfgDescriptions map[string]string, envPrefix string, outputPath string) error {
 	if err := checkConfigStruct(cfg); err != nil {
 		return fmt.Errorf("failed to create documentation: %w", err)
 	}
@@ -250,16 +260,13 @@ func CreateConfigMarkdownDocument[T any](cfg *T, cfgDescriptions map[string]stri
 			required = "Yes"
 		}
 
-		defaultValue := entry.DefaultValue
-		if entry.IsMasked {
-			defaultValue = "[Masked]"
-		}
+		defaultValue := getEntryMaskedDefaultValue(entry)
 
 		fmt.Fprintf(
 			&sb,
 			"| `%s` | `%s` | `%s` | %s | `%s` | %s |\n",
 			key,
-			entry.EnvironmentKey,
+			getEntryEnvKey(envPrefix, entry),
 			entry.ValueType.String(),
 			escapeMarkdown(defaultValue),
 			required,
@@ -282,15 +289,18 @@ func CreateConfigMarkdownDocument[T any](cfg *T, cfgDescriptions map[string]stri
 	for _, key := range keys {
 		entry := entryMap[key]
 
-		if entry.EnvironmentKey == "" {
+		envKey := getEntryEnvKey(envPrefix, entry)
+		if envKey == "" {
 			continue
 		}
+
+		defaultValue := getEntryMaskedDefaultValue(entry)
 
 		fmt.Fprintf(
 			&sb,
 			"      %s: %s\n",
-			entry.EnvironmentKey,
-			strconv.Quote(entry.DefaultValue),
+			envKey,
+			strconv.Quote(defaultValue),
 		)
 	}
 
@@ -309,27 +319,26 @@ func CreateConfigMarkdownDocument[T any](cfg *T, cfgDescriptions map[string]stri
 	for _, key := range keys {
 		entry := entryMap[key]
 
-		if entry.EnvironmentKey == "" {
+		envKey := getEntryEnvKey(envPrefix, entry)
+		if envKey == "" {
 			continue
 		}
+
+		defaultValue := getEntryMaskedDefaultValue(entry)
 
 		dockerEntries = append(
 			dockerEntries,
 			fmt.Sprintf(
 				"  -e %s=%s",
-				entry.EnvironmentKey,
-				shellQuote(entry.DefaultValue),
+				envKey,
+				shellQuote(defaultValue),
 			),
 		)
 	}
 
-	for i, envEntry := range dockerEntries {
-		suffix := " \\"
-		if i == len(dockerEntries)-1 {
-			suffix = ""
-		}
+	for _, envEntry := range dockerEntries {
 
-		fmt.Fprintf(&sb, "%s%s\n", envEntry, suffix)
+		fmt.Fprintf(&sb, "%s \\\n", envEntry)
 	}
 
 	sb.WriteString("  your-image:latest\n")

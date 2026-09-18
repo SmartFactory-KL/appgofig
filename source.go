@@ -73,7 +73,13 @@ func (src *yamlSrc) Load(cfgInfo map[string]*AppConfigEntry) (map[string]string,
 	}
 
 	if len(strings.TrimSpace(yamlPath)) == 0 {
-		return nil, fmt.Errorf("YAML source cannot be read: file path cannot be empty or file not found for path: %s", yamlPath)
+		// if a file was specified, it has to exist.
+		// if the defaults were used and none of them was found, simply assume its default settings and return an empty map
+		if len(src.filePath) > 0 {
+			return nil, fmt.Errorf("YAML source cannot be read: file path cannot be empty or file not found for path: %s", yamlPath)
+		} else {
+			return map[string]string{}, nil
+		}
 	}
 
 	yamlContent, err := os.ReadFile(filepath.Clean(yamlPath))
@@ -121,15 +127,8 @@ func EnvironmentSource() AppGofigSource {
 func (src *envSrc) Load(cfgInfo map[string]*AppConfigEntry) (map[string]string, error) {
 	output := make(map[string]string, len(cfgInfo))
 
-	for key, infoEntry := range cfgInfo {
-		var envKey string
-
-		if len(infoEntry.EnvironmentKey) > 0 {
-			envKey = getEnvKey(src.envPrefix, infoEntry.EnvironmentKey)
-		} else {
-			envKey = getEnvKey(src.envPrefix, key)
-		}
-
+	for _, infoEntry := range cfgInfo {
+		envKey := getEntryEnvKey(src.envPrefix, infoEntry)
 		envVal, ok := os.LookupEnv(envKey)
 		if !ok {
 			continue
