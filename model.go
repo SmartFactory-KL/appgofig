@@ -19,11 +19,12 @@ type AppConfigEntry struct {
 	// If true, this needs len(Value) > 0
 	IsRequired bool
 
-	// If true, Value will be masked when using VisitConfigValues
+	// If true, Value and DefaultValue will be masked when using VisitConfigEntries
 	IsMasked bool
 
-	// If non-nil, this will take precedence over the env key that would generate from the Key. Prefix will still be added to it though.
-	// use this for cases like HTTPURL which would becomd HTTP_URL
+	// If non-empty, this will take precedence over the env key that would generate from the Key.
+	// Prefix will still be added to it though.
+	// use this for cases like HTTPURL which would become HTTP_URL
 	EnvironmentKey string
 }
 

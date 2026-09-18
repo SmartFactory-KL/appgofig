@@ -74,8 +74,7 @@ func ReadConfig[T any](optionList ...AppGofigOption) (*T, error) {
 		return nil, fmt.Errorf("missing required fields: %w", err)
 	}
 
-	// apply values to a copy of config struct and return it
-
+	// apply values to cfg
 	v := reflect.ValueOf(cfg).Elem()
 	t := v.Type()
 

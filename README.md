@@ -34,8 +34,8 @@ type Config struct {
 }
 
 func main() {
-	// Read config using the struct instance
-	// By default (with no sources applied) it will simply use the specified default values
+	// Read config using the configuration type.
+	// With no sources, it will only apply the defined default values
 	cfg, err := appgofig.ReadConfig[Config]()
 
 	if err != nil {
@@ -150,6 +150,9 @@ appgofig.WithSources(
 	appgofig.SpecificYAMLSource("config.dev.yml")
 )
 ```
+
+> [!note]
+> `SpecificYAMLSource` will return an error if the file is not readable - but `YAMLSource` will not error if none of the default files is found. 
 
 The default file paths are (in order)
 

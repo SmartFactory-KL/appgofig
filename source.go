@@ -40,7 +40,7 @@ func YAMLSource() AppGofigSource {
 	}
 }
 
-// Load will read the specified yaml file and return a map of values for which a key in cfgInfo exists.
+// Load will read either the filePath or one of the default file paths
 func (src *yamlSrc) Load(cfgInfo map[string]*AppConfigEntry) (map[string]string, error) {
 	var pathsToCheck []string
 
@@ -73,8 +73,7 @@ func (src *yamlSrc) Load(cfgInfo map[string]*AppConfigEntry) (map[string]string,
 	}
 
 	if len(strings.TrimSpace(yamlPath)) == 0 {
-		// if a file was specified, it has to exist.
-		// if the defaults were used and none of them was found, simply assume its default settings and return an empty map
+		// if a file was specified, it has to exist. Otherwise not having one of the default files is not considered an error
 		if len(src.filePath) > 0 {
 			return nil, fmt.Errorf("YAML source cannot be read: file path cannot be empty or file not found for path: %s", yamlPath)
 		} else {
