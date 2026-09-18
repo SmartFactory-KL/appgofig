@@ -36,7 +36,7 @@ type Config struct {
 func main() {
 	// Read config using the struct instance
 	// By default (with no sources applied) it will simply use the specified default values
-	cfg, err := appgofig.ReadConfig(&Config{})
+	cfg, err := appgofig.ReadConfig[Config]()
 
 	if err != nil {
 		log.Fatal(err)
@@ -46,8 +46,7 @@ func main() {
 	log.Println(cfg.AppName, cfg.Port, cfg.Debug, cfg.Ratio)
 
 	// Usually, at least one source should be used, for example the environment
-	cfgFromEnv, err := appgofig.ReadConfig(
-		&Config{},
+	cfgFromEnv, err := appgofig.ReadConfig[Config](
 		appgofig.WithSources(
 			appgofig.EnvironmentSource(),
 		),
@@ -183,8 +182,7 @@ Sources and Overrides can be combined. Sources will be applied in order, Overrid
 If multiple sources define the same key, later sources will overwrite earlier ones.
 
 ```go
-cfg, err := appgofig.ReadConfig(
-	&Config{},
+cfg, err := appgofig.ReadConfig[Config](
 	appgofig.WithSources(
 		appgofig.YAMLSource(),
 		appgofig.PrefixedEnvironmentSource("APP"),

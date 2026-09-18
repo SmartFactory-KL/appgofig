@@ -9,11 +9,12 @@ import (
 	"strings"
 )
 
-// ReadConfig takes any Config struct and a list of options. Based on this it first reads the default values
+// ReadConfig constructs a configuration of type T from its tags, provided sources and overrides. Based on this it first reads the default values
 // and then all sources in order, where later values overwrite earlier ones. It returns the Config with applied values.
-func ReadConfig[T any](cfg *T, optionList ...AppGofigOption) (*T, error) {
-	// apply the options
+func ReadConfig[T any](optionList ...AppGofigOption) (*T, error) {
+	cfg := new(T)
 
+	// apply the options
 	gofigOptions := &AppGofigOptions{
 		Sources:   nil,
 		Overrides: nil,

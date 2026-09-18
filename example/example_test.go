@@ -29,7 +29,7 @@ var exampleCfgDescriptions map[string]string = map[string]string{
 func ExampleReadConfig() {
 	// This will simply apply the default values from the struct
 	// as no sources are provided
-	cfg, err := appgofig.ReadConfig(&ExampleConfig{})
+	cfg, err := appgofig.ReadConfig[ExampleConfig]()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -37,8 +37,7 @@ func ExampleReadConfig() {
 
 	// One standard way of reading configuration might be
 	// reading YAML first with ENV overwriting it
-	cfg, err = appgofig.ReadConfig(
-		&ExampleConfig{},
+	cfg, err = appgofig.ReadConfig[ExampleConfig](
 		appgofig.WithSources(
 			appgofig.YAMLSource(),
 			appgofig.EnvironmentSource(),

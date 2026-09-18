@@ -22,7 +22,7 @@ func TestReadConfigRejectsOptionError(t *testing.T) {
 		FloatValue float64 `default:"1"`
 	}
 	errSource := ErrorSource{}
-	_, err := appgofig.ReadConfig(&TestConfig{}, appgofig.WithSources(&errSource))
+	_, err := appgofig.ReadConfig[TestConfig](appgofig.WithSources(&errSource))
 
 	if err == nil {
 		t.Fatal("ReadCOnfig() expected an error for an option erroring out")

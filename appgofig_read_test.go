@@ -17,7 +17,7 @@ func TestReadConfigUsesDefaults(t *testing.T) {
 		StringValue string  `default:"Hello World"`
 	}
 
-	cfg, err := appgofig.ReadConfig(&TestConfig{})
+	cfg, err := appgofig.ReadConfig[TestConfig]()
 	if err != nil {
 		t.Fatalf("ReadConfig() returned unexpected error: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestReadConfigRejectsUnexportedFields(t *testing.T) {
 		secret string `default:"hidden"`
 	}
 
-	_, err := appgofig.ReadConfig(&TestConfigPrivateFields{})
+	_, err := appgofig.ReadConfig[TestConfigPrivateFields]()
 
 	if err == nil {
 		t.Fatal("appgofig.ReadConfig expected an error for an unexported field")
@@ -94,8 +94,7 @@ func TestReadConfigRejectsMalformedInput(t *testing.T) {
 			t.Setenv("INT_VALUE", "")
 			t.Setenv(tt.envKey, tt.value)
 
-			_, err := appgofig.ReadConfig(
-				&TestConfig{},
+			_, err := appgofig.ReadConfig[TestConfig](
 				appgofig.WithSources(appgofig.EnvironmentSource()),
 			)
 			if err == nil {
@@ -111,7 +110,7 @@ func TestReadConfigRejectsInvalidFieldType(t *testing.T) {
 		RequiredInput float32 `required:"true"`
 	}
 
-	_, err := appgofig.ReadConfig(&appgofigTestWithRequired{})
+	_, err := appgofig.ReadConfig[appgofigTestWithRequired]()
 
 	if err == nil {
 		t.Fatal("ReadCOnfig() expected an error for invalid field type")
@@ -134,7 +133,7 @@ func TestReadConfigZerosEmptyNumerics(t *testing.T) {
 	t.Setenv("BOOL_VALUE", "")
 	t.Setenv("FLOAT_VALUE", "")
 
-	cfg, err := appgofig.ReadConfig(&TestConfig{}, appgofig.WithSources(appgofig.EnvironmentSource()))
+	cfg, err := appgofig.ReadConfig[TestConfig](appgofig.WithSources(appgofig.EnvironmentSource()))
 	if err != nil {
 		t.Fatalf("unexpected error for appgofig.ReadConfig on zero input: %v", err)
 	}
@@ -157,8 +156,7 @@ func TestReadConfigAppliesEnvironmentValues(t *testing.T) {
 	t.Setenv("PORT", "9090")
 	t.Setenv("DEBUG", "true")
 
-	cfg, err := appgofig.ReadConfig(
-		&TestConfig{},
+	cfg, err := appgofig.ReadConfig[TestConfig](
 		appgofig.WithSources(
 			appgofig.EnvironmentSource(),
 		),
@@ -208,8 +206,7 @@ func TestReadConfigAppliesYAMLValues(t *testing.T) {
 		}
 	})
 
-	cfg, err := appgofig.ReadConfig(
-		&TestConfig{},
+	cfg, err := appgofig.ReadConfig[TestConfig](
 		appgofig.WithSources(appgofig.YAMLSource()),
 	)
 	if err != nil {
@@ -245,8 +242,7 @@ func TestReadConfigAppliesYAMLValuesFromSpecificFile(t *testing.T) {
 		t.Fatalf("failed to write test YAML: %v", err)
 	}
 
-	cfg, err := appgofig.ReadConfig(
-		&TestConfig{},
+	cfg, err := appgofig.ReadConfig[TestConfig](
 		appgofig.WithSources(
 			appgofig.SpecificYAMLSource(yamlPath),
 		),
@@ -287,8 +283,7 @@ func TestReadConfigRejectsInvalidYAML(t *testing.T) {
 			t.Fatalf("failed to write test YAML: %v", err)
 		}
 
-		_, err := appgofig.ReadConfig(
-			&TestConfig{},
+		_, err := appgofig.ReadConfig[TestConfig](
 			appgofig.WithSources(
 				appgofig.SpecificYAMLSource(yamlPath),
 			),
@@ -325,8 +320,7 @@ func TestReadConfigRejectsInvalidYAMLTypes(t *testing.T) {
 			t.Fatalf("failed to write test YAML: %v", err)
 		}
 
-		_, err := appgofig.ReadConfig(
-			&TestConfig{},
+		_, err := appgofig.ReadConfig[TestConfig](
 			appgofig.WithSources(
 				appgofig.SpecificYAMLSource(yamlPath),
 			),
@@ -346,8 +340,7 @@ func TestReadConfigAppliesOverrides(t *testing.T) {
 		FloatValue float64 `default:"1"`
 	}
 
-	cfg, err := appgofig.ReadConfig(
-		&TestConfig{},
+	cfg, err := appgofig.ReadConfig[TestConfig](
 		appgofig.WithOverrides(map[string]string{
 			"Port": "7070",
 		}),
@@ -369,8 +362,7 @@ func TestReadConfigRejectsMissingOverrideKey(t *testing.T) {
 		Secret     string  `default:"secret" env:"APP_SECRET" secret:"true"`
 		FloatValue float64 `default:"1"`
 	}
-	_, err := appgofig.ReadConfig(
-		&TestConfig{},
+	_, err := appgofig.ReadConfig[TestConfig](
 		appgofig.WithOverrides(map[string]string{
 			"NotExisting": "7070",
 		}),
@@ -386,7 +378,7 @@ func TestReadConfigChecksRequiredFields(t *testing.T) {
 		RequiredInput string `default:"" required:"true"`
 	}
 
-	_, err := appgofig.ReadConfig(&appgofigTestWithRequired{})
+	_, err := appgofig.ReadConfig[appgofigTestWithRequired]()
 
 	if err == nil {
 		t.Fatal("ReadCOnfig() expected an error for missing required fields")
@@ -414,8 +406,7 @@ func TestReadConfigAppliesSourcesInOrder(t *testing.T) {
 		t.Fatalf("failed to write test YAML: %v", err)
 	}
 
-	firstOrderCfg, err := appgofig.ReadConfig(
-		&TestConfig{},
+	firstOrderCfg, err := appgofig.ReadConfig[TestConfig](
 		appgofig.WithSources(
 			appgofig.EnvironmentSource(),
 			appgofig.YAMLSource(),
@@ -433,8 +424,7 @@ func TestReadConfigAppliesSourcesInOrder(t *testing.T) {
 		t.Fatalf("ENV-YAML-Order resultet in %q instead of %q for %q", firstOrderCfg.Age, 300, "Age")
 	}
 
-	secondOrderCfg, err := appgofig.ReadConfig(
-		&TestConfig{},
+	secondOrderCfg, err := appgofig.ReadConfig[TestConfig](
 		appgofig.WithSources(
 			appgofig.YAMLSource(),
 			appgofig.EnvironmentSource(),
