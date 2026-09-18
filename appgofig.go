@@ -75,11 +75,8 @@ func ReadConfig[T any](optionList ...AppGofigOption) (*T, error) {
 	}
 
 	// apply values to a copy of config struct and return it
-	cfgType := reflect.TypeOf(cfg).Elem()
 
-	resultCfgValue := reflect.New(cfgType)
-
-	v := resultCfgValue.Elem()
+	v := reflect.ValueOf(cfg).Elem()
 	t := v.Type()
 
 	for k := 0; k < t.NumField(); k++ {
@@ -99,7 +96,7 @@ func ReadConfig[T any](optionList ...AppGofigOption) (*T, error) {
 		}
 	}
 
-	return resultCfgValue.Interface().(*T), nil
+	return cfg, nil
 }
 
 // VisitConfigEntries will run visit() once using AppConfigEntries with the actual value taken from cfg itself.
@@ -203,7 +200,7 @@ func CreateConfigExampleYAML[T any](cfg *T, cfgDescriptions map[string]string, e
 
 		defaultValue := getEntryMaskedDefaultValue(cfgEntry)
 
-		// IsMasked will always result in a string value since and should therefore be quoted
+		// IsMasked will always result in a string value and therefore it should be quoted
 		if cfgEntry.ValueType == reflect.String || cfgEntry.IsMasked {
 			defaultValue = strconv.Quote(defaultValue)
 		}

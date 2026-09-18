@@ -199,7 +199,7 @@ Using `VisitConfigEntries`, all configuration values can be inspected:
 
 ```go
 err := appgofig.VisitConfigEntries(
-	&cfg,
+	cfg,
 	func(entry appgofig.AppConfigEntry) {
 		log.Printf("%s=%s", entry.Key, entry.Value)
 	},
@@ -232,7 +232,7 @@ descriptions := map[string]string{
 }
 
 if err := appgofig.CreateConfigDocumentation(
-	&cfg,
+	cfg,
 	descriptions,
 	"ENV_PREFIX",
 	"docs",
@@ -252,14 +252,14 @@ They can also be created individually:
 
 ```go
 err := appgofig.CreateConfigMarkdownDocument(
-	&cfg,
+	cfg,
 	descriptions,
 	"ENV_PREFIX",
 	"docs/config.md",
 )
 
 err := appgofig.CreateConfigExampleYAML(
-	&cfg,
+	cfg,
 	descriptions,
 	"ENV_PREFIX",
 	"docs/config.example.yaml",

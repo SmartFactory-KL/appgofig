@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/smartfactory-kl/appgofig"
+	"go.yaml.in/yaml/v3"
 )
 
 func TestCreateConfigDocumentation(t *testing.T) {
@@ -86,7 +87,7 @@ func TestCreateConfigDocumentationWritesExpectedContent(t *testing.T) {
 		Name       string `default:"demo" env:"NAME"`
 		Port       int    `default:"8080" required:"true"`
 		APIKey     string `default:"secret-value" env:"API_KEY" masked:"true"`
-		RetryLimit int    `default:"42" env:"RETRY_LIMIT" masked:"true"`
+		RetryLimit int    `default:"42424242" env:"RETRY_LIMIT" masked:"true"`
 		Disabled   bool   `default:"false"`
 	}
 
@@ -115,15 +116,15 @@ func TestCreateConfigDocumentationWritesExpectedContent(t *testing.T) {
 		"| `Name` | `APP_NAME` | `string` | demo | `No` | The application name. |",
 		"| `Port` | `APP_PORT` | `int` | 8080 | `Yes` | The listening port. |",
 		"| `APIKey` | `APP_API_KEY` | `string` | [Masked (len: 12)] | `No` | Credential for the upstream API. |",
-		"| `RetryLimit` | `APP_RETRY_LIMIT` | `int` | [Masked (len: 2)] | `No` | Maximum retry attempts. |",
+		"| `RetryLimit` | `APP_RETRY_LIMIT` | `int` | [Masked (len: 8)] | `No` | Maximum retry attempts. |",
 		`      APP_NAME: "demo"`,
 		`      APP_PORT: "8080"`,
 		`      APP_API_KEY: "[Masked (len: 12)]"`,
-		`      APP_RETRY_LIMIT: "[Masked (len: 2)]"`,
+		`      APP_RETRY_LIMIT: "[Masked (len: 8)]"`,
 		`  -e APP_NAME='demo' \`,
 		`  -e APP_PORT='8080' \`,
 		`  -e APP_API_KEY='[Masked (len: 12)]' \`,
-		`  -e APP_RETRY_LIMIT='[Masked (len: 2)]' \`,
+		`  -e APP_RETRY_LIMIT='[Masked (len: 8)]' \`,
 		`  -e APP_DISABLED='false' \`,
 		"  your-image:latest",
 	} {
@@ -132,13 +133,13 @@ func TestCreateConfigDocumentationWritesExpectedContent(t *testing.T) {
 		}
 	}
 
-	for _, secret := range []string{"secret-value", "42"} {
+	for _, secret := range []string{"secret-value", "42424242"} {
 		if strings.Contains(string(markdown), secret) {
 			t.Errorf("generated Markdown exposes masked default %q:\n%s", secret, markdown)
 		}
 	}
 
-	yaml, err := os.ReadFile(filepath.Join(outputDir, "config.example.yaml"))
+	yamlContent, err := os.ReadFile(filepath.Join(outputDir, "config.example.yaml"))
 	if err != nil {
 		t.Fatalf("failed to read generated YAML: %v", err)
 	}
@@ -147,17 +148,22 @@ func TestCreateConfigDocumentationWritesExpectedContent(t *testing.T) {
 		"# Name [string]\n# Environment: APP_NAME\n# The application name.\nName: \"demo\"",
 		"# Port [int - required]\n# Environment: APP_PORT\n# The listening port.\nPort: 8080",
 		"# APIKey [string]\n# Environment: APP_API_KEY\n# Credential for the upstream API.\nAPIKey: \"[Masked (len: 12)]\"",
-		"# RetryLimit [int]\n# Environment: APP_RETRY_LIMIT\n# Maximum retry attempts.\nRetryLimit: \"[Masked (len: 2)]\"",
+		"# RetryLimit [int]\n# Environment: APP_RETRY_LIMIT\n# Maximum retry attempts.\nRetryLimit: \"[Masked (len: 8)]\"",
 		"# Disabled [bool]\n# Environment: APP_DISABLED\nDisabled: false",
 	} {
-		if !strings.Contains(string(yaml), want) {
-			t.Errorf("generated YAML does not contain %q\n%s", want, yaml)
+		if !strings.Contains(string(yamlContent), want) {
+			t.Errorf("generated YAML does not contain %q\n%s", want, yamlContent)
 		}
 	}
 
-	for _, secret := range []string{"secret-value", "RetryLimit: 42"} {
-		if strings.Contains(string(yaml), secret) {
-			t.Errorf("generated YAML exposes masked default %q:\n%s", secret, yaml)
+	for _, secret := range []string{"secret-value", "RetryLimit: 42424242"} {
+		if strings.Contains(string(yamlContent), secret) {
+			t.Errorf("generated YAML exposes masked default %q:\n%s", secret, yamlContent)
 		}
+	}
+
+	var yamlMap map[string]string
+	if err := yaml.Unmarshal(yamlContent, &yamlMap); err != nil {
+		t.Errorf("generated YAML failed to unmarshal: %v", err)
 	}
 }

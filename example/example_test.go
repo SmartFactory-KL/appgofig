@@ -34,10 +34,14 @@ func ExampleReadConfig() {
 		log.Fatal(err)
 	}
 	fmt.Println(cfg)
+	// Output:
+	// &{DefaultStringValue 100 3.141 true 3.141 MyRequiredValue}
+}
 
+func ExampleReadConfig_withSources() {
 	// One standard way of reading configuration might be
 	// reading YAML first with ENV overwriting it
-	cfg, err = appgofig.ReadConfig[ExampleConfig](
+	cfg, err := appgofig.ReadConfig[ExampleConfig](
 		appgofig.WithSources(
 			appgofig.YAMLSource(),
 			appgofig.EnvironmentSource(),
