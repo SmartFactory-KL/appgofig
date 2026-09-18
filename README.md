@@ -152,7 +152,7 @@ appgofig.WithSources(
 ```
 
 > [!note]
-> `SpecificYAMLSource` will return an error if the file is not readable - but `YAMLSource` will not error if none of the default files is found. 
+> `SpecificYAMLSource` will return an error if the file is not readable - but `YAMLSource` will not error if none of the default files is found and simply return no values 
 
 The default file paths are (in order)
 
